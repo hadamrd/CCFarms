@@ -3,13 +3,18 @@ python -m venv prefect-env
 source prefect-env/bin/activate
 pip install -U prefect
 
-# start server
+# start local quick setup
+## start server
 prefect server start 
 export PREFECT_API_URL=http://127.0.0.1:4200/api
+there is also
+prefect config set PREFECT_API_URL=http://localhost:4200/api
 
-# create a worker pool
+## create a worker pool
 prefect worker start --pool "my-pool"
 
+# start interesting docker compose setup
+docker compose up -d
 
 # Create a secret block through the UI
 prefect block create secret

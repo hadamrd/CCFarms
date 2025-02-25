@@ -1,7 +1,6 @@
 from typing import Dict, Any
 from prefect.blocks.core import Block
 from pydantic import SecretStr
-from pydantic.networks import HttpUrl
 import requests
 
 class TeamsWebhook(Block):

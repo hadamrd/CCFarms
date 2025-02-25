@@ -1,14 +1,38 @@
-# prefect.yaml
-build:
-  - prefect.deployments.steps.git_clone:
-      repository: https://github.com/your-repo/orchestration-play.git
-      branch: main
+# Welcome to your prefect.yaml file! You can use this file for storing and managing
+# configuration for deploying your flows. We recommend committing this file to source
+# control along with your flow code.
 
+# Generic metadata about this project
+name: orchestration-play
+prefect-version: 2.20.16
+
+# build section allows you to manage and build docker images
+build:
+
+# push section allows you to manage if and how this project is uploaded to remote locations
+push:
+
+# pull section allows you to provide instructions for cloning this project in remote locations
+pull:
+- prefect.deployments.steps.git_clone:
+    repository: https://github.com/hadamrd/prefect-playground.git
+    branch: main
+
+# the deployments section allows you to provide configuration for deploying flows
 deployments:
-  - name: weather-report
-    entrypoint: "src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow"
-    parameters:
-      location: "Paris"
-    work_pool:
-      name: "my-pool"
-      work_queue_name: "default"
+- name: weather-flow
+  version:
+  tags:
+    - weather
+    - flow
+  description: Main workflow with creative AI enhancements.
+  entrypoint: 
+    src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow_with_teams_notif
+  parameters:
+    location: "Paris"
+  work_pool:
+    name: default-pool
+    work_queue_name:
+    job_variables: {}
+  schedules: []
+

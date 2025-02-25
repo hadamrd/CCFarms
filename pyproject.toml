@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "orchestration-play"
+version = "0.1.0"
+description = "Orchestration flows with Prefect"
+authors = ["Khalid MAJDOUB <khalid.majdoub@sidetrade.com>"]
+packages = [
+    { include = "orchestration_play", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+prefect = "2.16.2"
+requests = ">=2.31.0"
+anthropic = ">=0.3.11"
+python-dotenv = ">=1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+mypy = "^1.10.0"  # Add mypy as dev dependency
+types-requests = "^2.32.0.20241016"
+types-python-dateutil = "^2.9.0.20241206"
+types-pyyaml = "^6.0.12.20241230"
+pydantic = "^2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

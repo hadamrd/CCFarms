@@ -1,0 +1,14 @@
+# prefect.yaml
+build:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/your-repo/orchestration-play.git
+      branch: main
+
+deployments:
+  - name: weather-report
+    entrypoint: "src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow"
+    parameters:
+      location: "Paris"
+    work_pool:
+      name: "my-pool"
+      work_queue_name: "default"

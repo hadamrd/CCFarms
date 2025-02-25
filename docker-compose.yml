@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "prefect"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  prefect-server:
+    image: prefecthq/prefect:2-latest
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    ports:
+      - "4200:4200"
+    command: prefect server start --host 0.0.0.0
+
+  prefect-worker:
+    image: prefecthq/prefect:2-latest
+    restart: always
+    depends_on:
+      - prefect-server
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    volumes:
+      - ./flows:/opt/prefect/flows
+    command: prefect worker start -p my-pool
+
+volumes:
+  postgres-data:

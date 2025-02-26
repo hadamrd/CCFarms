@@ -1,0 +1,5 @@
+FROM prefecthq/prefect:2-latest
+
+# Install Poetry and configure it to use the system Python environment
+RUN pip install --no-cache-dir poetry && \
+    poetry config virtualenvs.create false

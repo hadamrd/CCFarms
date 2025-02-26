@@ -18,7 +18,7 @@ class ArticleCache:
         """
         self.connection_string = connection_string or os.environ.get(
             "MONGODB_URL", 
-            "mongodb://article_user:article_password@mongodb:27017/"
+            "mongodb://article_user:article_password@mongodb:27017/article_db?authSource=admin"
         )
         self.db_name = db_name
         self.collection_name = collection_name

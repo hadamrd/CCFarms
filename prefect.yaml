@@ -21,18 +21,29 @@ pull:
 # the deployments section allows you to provide configuration for deploying flows
 deployments:
 - name: weather-flow
-  version:
+  version: 1.0.0
   tags:
-    - weather
-    - flow
+  - weather
   description: Main workflow with creative AI enhancements.
   entrypoint: 
     src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow_with_teams_notif
   parameters:
-    location: "Paris"
+    location: Paris
   work_pool:
     name: default-pool
-    work_queue_name:
+    work_queue_name: default
     job_variables: {}
   schedules: []
-
+- name: news-scoring-flow
+  version: 1.0.0
+  tags:
+  - news
+  - ai
+  description: Flow that scores news articles.
+  entrypoint: "src/orchestration_play/flows/news_scoring_flow.py:news_scoring_flow"
+  work_pool:
+    name: default-pool
+    work_queue_name: default
+    job_variables: {}
+  parameters: {}
+  schedules: []

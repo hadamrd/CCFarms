@@ -8,9 +8,9 @@ class TeamsWebhook(Block):
     _block_type_name = "Teams Webhook"
     _block_type_slug = "teams-webhook"
     _logo_url = "https://cdn-icons-png.flaticon.com/512/732/732227.png"
-    
-    url: SecretStr
 
+    url: SecretStr
+    
     def notify(self, message: str) -> requests.Response:
         teams_payload: Dict[str, Any] = {
             "@type": "MessageCard",

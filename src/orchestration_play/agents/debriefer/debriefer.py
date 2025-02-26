@@ -21,6 +21,8 @@ template_env = env = Environment(
 
 class Debriefer(AssistantAgent):
     def __init__(self, anthropic_api_key: str, news_client: NewsAPIClient=None, model: str = "claude-3-5-sonnet-20241022"):
+        system_message = template_env.get_template('system_message.j2').render()
+        
         super().__init__(
             name="NewsScout",
             llm_config={
@@ -33,7 +35,7 @@ class Debriefer(AssistantAgent):
                     "temperature": 0.3,  # More factual
                     "timeout": 30,
             },
-            system_message=template_env.get_template('system_message.j2')
+            system_message=system_message
         )
         self.logger = get_run_logger()
         self.session = requests.Session()

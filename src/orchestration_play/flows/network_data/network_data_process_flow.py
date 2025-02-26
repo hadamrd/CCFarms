@@ -8,7 +8,6 @@ Uses standard CSV module instead of Pandas and sends Teams notifications.
 import os
 import csv
 import shutil
-import json
 from datetime import datetime
 from typing import List, Dict
 

@@ -58,3 +58,12 @@ deployments:
     entrypoint: "src/orchestration_play/flows/comedy_generation_flow.py:comedy_script_flow"
     work_pool:
       name: default-pool
+  - name: network-data-etl
+    version: 1.0.0
+    tags:
+    - alerting
+    - network
+    description: ETL to monitor network data and process then store in database.
+    entrypoint: "src/orchestration_play/flows/network_data/network_data_process_flow.py:process_metrics_pipeline"
+    work_pool:
+      name: default-pool

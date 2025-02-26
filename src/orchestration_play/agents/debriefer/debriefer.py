@@ -87,7 +87,7 @@ class Debriefer(AssistantAgent):
         """Analyze a single article for comedy potential"""
         prompt = self._build_analysis_prompt(article)
         response = self.generate_reply([{"content": prompt, "role": "user"}])
-        
+        self.logger.info(f"Received response: {response}")
         # Parse the tagged response into ArticleBrief
         brief_json = self._extract_tagged_json(response.get("content", ""))
         return ArticleBrief(**brief_json)

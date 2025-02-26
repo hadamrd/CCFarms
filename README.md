@@ -1,9 +1,7 @@
-# install prefect in venv
-python -m venv prefect-env
-source prefect-env/bin/activate
-pip install -U prefect
-
 # start local quick setup
+# install prefect in venv
+poetry install
+
 ## start server
 prefect server start 
 export PREFECT_API_URL=http://127.0.0.1:4200/api
@@ -11,7 +9,7 @@ there is also
 prefect config set PREFECT_API_URL=http://localhost:4200/api
 
 ## create a worker pool
-prefect worker start --pool "my-pool"
+prefect worker start --pool "default-pool"
 
 # start interesting docker compose setup
 docker compose up -d

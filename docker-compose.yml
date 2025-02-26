@@ -33,12 +33,19 @@ services:
     ports:
       - "4200:4200"
     command: prefect server start --host 0.0.0.0
+    healthcheck: 
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   prefect-worker:
     image: prefecthq/prefect:2-latest
     restart: always
     depends_on:
-      - prefect-server
+      prefect-server:
+        condition: service_healthy
     environment:
       - PREFECT_API_URL=http://prefect-server:4200/api
     volumes:

@@ -31,9 +31,6 @@ deployments:
       location: Paris
     work_pool:
       name: default-pool
-      work_queue_name: default
-      job_variables: {}
-    schedules: []
   - name: news-scoring-flow
     version: 1.0.0
     tags:
@@ -43,10 +40,6 @@ deployments:
     entrypoint: "src/orchestration_play/flows/news_scoring_flow.py:news_scoring_flow"
     work_pool:
       name: default-pool
-      work_queue_name: default
-      job_variables: {}
-    parameters: {}
-    schedules: []
   - name: comedy-brief-analysis
     version: 1.0.0
     tags:
@@ -56,7 +49,12 @@ deployments:
     entrypoint: "src/orchestration_play/flows/debriefer_flow.py:debriefer_flow"
     work_pool:
       name: default-pool
-      work_queue_name: default
-      job_variables: {}
-    parameters: {}
-    schedules: []
+  - name: satire-script-generation
+    version: 1.0.0
+    tags:
+    - news
+    - ai
+    description: Generate satire scripts from top comedy-potential articles.
+    entrypoint: "src/orchestration_play/flows/comedy_generation_flow.py:comedy_script_flow"
+    work_pool:
+      name: default-pool

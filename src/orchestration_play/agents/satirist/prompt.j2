@@ -1,0 +1,40 @@
+I need you to create a comedy script for our satirical news show based on today's analyzed news stories. 
+
+Today is {{ date }}.
+
+Here are the analyzed briefs from our news team:
+
+{% for brief in briefs %}
+ARTICLE {{ loop.index }}:
+Title: {{ brief.title }}
+URL: {{ brief.url }}
+{% if brief.brief.comedy_potential %}
+Comedy Potential Score: {{ brief.brief.comedy_potential.overall_score }}
+Comedy Reasons: {{ brief.brief.comedy_potential.reasons }}
+{% endif %}
+{% if brief.brief.core_story %}
+Summary: {{ brief.brief.core_story.simple_summary }}
+Key Elements: {{ brief.brief.core_story.key_elements }}
+{% endif %}
+{% if brief.brief.absurdity_analysis %}
+Absurd Elements: {{ brief.brief.absurdity_analysis.absurd_elements }}
+Exaggeration Potential: {{ brief.brief.absurdity_analysis.exaggeration_potential }}
+{% endif %}
+{% if brief.brief.cultural_relevance %}
+References: {{ brief.brief.cultural_relevance.references }}
+Topicality: {{ brief.brief.cultural_relevance.topicality }}
+{% endif %}
+{% if brief.brief.target_analysis %}
+Primary Targets: {{ brief.brief.target_analysis.primary_targets }}
+Target Type: {{ brief.brief.target_analysis.target_type }}
+{% endif %}
+
+{% endfor %}
+
+Please craft a comedy script for a 10-15 minute segment combining the best material from these stories. Focus on the articles with the highest comedy potential scores and look for unexpected connections between stories.
+
+Your response must follow the format described in your instructions, returning properly formatted JSON wrapped in <comedy_script> tags.
+
+I need a witty title, an opening monologue to set the tone, individual comedy segments for the most promising stories, and a brief closing with a final punchline. Each segment should include headline jokes and short sketch ideas where appropriate.
+
+Be creative, irreverent, but tasteful. Good luck!

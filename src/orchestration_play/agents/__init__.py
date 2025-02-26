@@ -1,7 +1,9 @@
 from .digger import Digger
-from .debriefer import Debriefer
+from .debriefer.debriefer import Debriefer
+from .satirist.satirist import Satirist
 
 __all__ = [
     'Digger',
-    'Debriefer'
+    'Debriefer',
+    'Satirist'
 ]

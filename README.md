@@ -12,12 +12,16 @@ prefect config set PREFECT_API_URL=http://localhost:4200/api
 prefect worker start --pool "default-pool"
 
 # start interesting docker compose setup
+## start the stack
 docker compose up -d
 
-# Create a secret block through the UI
+# Create a secret block through the UI for anthropic apikey
 prefect block create secret
 
 # Register and create a custom block for teams notifications
+prefect deploy --all => to deploy all
 prefect block register -m orchestration_play.blocks => to register block types defined in the project blocks
+
+prefect block create newsapi-config => to configure news api
 prefect block create teams-webhook => to get webui url to create a new block of the registred type
 

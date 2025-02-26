@@ -32,7 +32,7 @@ if __name__ == "__main__":
             continue
             
         print(f"\nAttempting to fetch: {article['title']}")
-        content = client._fetch_article_content(url)
+        content = client.fetch_article_content(url)
         if content:
             print("\nSuccessfully fetched content:")
             print("=" * 50)

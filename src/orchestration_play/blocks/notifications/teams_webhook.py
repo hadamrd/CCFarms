@@ -18,7 +18,7 @@ class TeamsWebhook(Block):
             "themeColor": "0076D7",
             "summary": "Prefect Notification",
             "sections": [{
-                "activityTitle": "Weather Report Flow",
+                "activityTitle": "Flow Notification",
                 "text": message
             }]
         }

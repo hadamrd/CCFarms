@@ -118,7 +118,7 @@ class NewsAPIClient:
             logger.error(f"Invalid JSON response: {str(e)}")
             raise NewsAPIError(f"Invalid response format: {str(e)}")
 
-    def _fetch_article_content(self, url: str) -> Optional[str]:
+    def fetch_article_content(self, url: str) -> Optional[str]:
         try:
             # Try to get the page content
             response = self.session.get(
@@ -217,7 +217,7 @@ if __name__ == "__main__":
             continue
             
         print(f"\nAttempting to fetch: {article['title']}")
-        content = client._fetch_article_content(url)
+        content = client.fetch_article_content(url)
         if content:
             print("\nSuccessfully fetched content:")
             print("=" * 50)

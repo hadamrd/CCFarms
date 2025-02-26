@@ -20,30 +20,43 @@ pull:
 
 # the deployments section allows you to provide configuration for deploying flows
 deployments:
-- name: weather-flow
-  version: 1.0.0
-  tags:
-  - weather
-  description: Main workflow with creative AI enhancements.
-  entrypoint: 
-    src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow_with_teams_notif
-  parameters:
-    location: Paris
-  work_pool:
-    name: default-pool
-    work_queue_name: default
-    job_variables: {}
-  schedules: []
-- name: news-scoring-flow
-  version: 1.0.0
-  tags:
-  - news
-  - ai
-  description: Flow that scores news articles.
-  entrypoint: "src/orchestration_play/flows/news_scoring_flow.py:news_scoring_flow"
-  work_pool:
-    name: default-pool
-    work_queue_name: default
-    job_variables: {}
-  parameters: {}
-  schedules: []
+  - name: weather-flow
+    version: 1.0.0
+    tags:
+    - weather
+    description: Main workflow with creative AI enhancements.
+    entrypoint: 
+      src/orchestration_play/flows/weather_flow.py:weather_ai_report_flow_with_teams_notif
+    parameters:
+      location: Paris
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables: {}
+    schedules: []
+  - name: news-scoring-flow
+    version: 1.0.0
+    tags:
+    - news
+    - ai
+    description: Flow that scores news articles.
+    entrypoint: "src/orchestration_play/flows/news_scoring_flow.py:news_scoring_flow"
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables: {}
+    parameters: {}
+    schedules: []
+  - name: comedy-brief-analysis
+    version: 1.0.0
+    tags:
+    - news
+    - ai
+    description: Analyze top comedy-potential articles with detailed satire briefs.
+    entrypoint: "src/orchestration_play/flows/debriefer_flow.py:debriefer_flow"
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables: {}
+    parameters: {}
+    schedules: []

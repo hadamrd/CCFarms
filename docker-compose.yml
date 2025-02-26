@@ -30,6 +30,7 @@ services:
     environment:
       - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_REDIS_URL=redis://redis:6379/0
     ports:
       - "4200:4200"
     command: prefect server start --host 0.0.0.0
@@ -54,5 +55,23 @@ services:
     command: >
       bash -c 'pip install -e . && prefect worker start --pool "default-pool" --work-queue "default"'
 
+  mongodb:
+    image: mongo:6
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: article_user
+      MONGO_INITDB_ROOT_PASSWORD: article_password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   postgres-data:
+  mongodb-data:

@@ -60,8 +60,12 @@ class Debriefer(AssistantAgent):
                 article['content'] = content
 
                 # Now analyze with full content
-                brief = self.analyze_article(article)
-                processed.append(brief)
+                try:
+                    brief = self.analyze_article(article)
+                    processed.append(brief)
+                    self.logger.info(f"Successfully analyzed article: {article.get('title')}")
+                except Exception as e:
+                    self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
                 
             except Exception as e:
                 self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
@@ -85,17 +89,33 @@ class Debriefer(AssistantAgent):
     )
     def analyze_article(self, article: Dict) -> ArticleBrief:
         """Analyze a single article for comedy potential"""
-        prompt = self._build_analysis_prompt(article)
-        response = self.generate_reply([{"content": prompt, "role": "user"}])
-        self.logger.info(f"Received response: {response}")
-        # Parse the tagged response into ArticleBrief
-        brief_json = self._extract_tagged_json(response.get("content", ""))
-        return ArticleBrief(**brief_json)
-
+        try:
+            prompt = self._build_analysis_prompt(article)
+            self.logger.info(f"Sending analysis request for: {article.get('title')}")
+            
+            response = self.generate_reply([{"content": prompt, "role": "user"}])
+            
+            if not response or "content" not in response:
+                self.logger.error(f"Empty or invalid response for {article.get('title')}")
+                raise ValueError("Empty or invalid response from LLM")
+            
+            self.logger.info(f"Received response: {response}")
+            # Parse the tagged response into ArticleBrief
+            brief_json = self._extract_tagged_json(response.get("content", ""))
+            return ArticleBrief(**brief_json)
+        except Exception as e:
+            self.logger.error(f"Error in analyze_article: {str(e)}")
+            raise  # Re-raise for retry
+        
     def _extract_tagged_json(self, content: str) -> Dict:
         """Extract JSON from between brief_json tags"""
         pattern = r'<brief_json>(.*?)</brief_json>'
         match = re.search(pattern, content, re.DOTALL)
         if not match:
             raise ValueError("No brief_json tags found in response")
-        return json.loads(match.group(1).strip())
+        json_str = match.group(1).strip()
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Invalid JSON in response: {json_str[:500]}...")
+            raise ValueError(f"Invalid JSON in response: {str(e)}")

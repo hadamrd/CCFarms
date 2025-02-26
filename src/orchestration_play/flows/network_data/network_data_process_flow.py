@@ -2,14 +2,17 @@
 """
 Batch processor for network metrics CSV files as a Prefect pipeline.
 This script processes CSV files in a directory and stores the data in MongoDB.
+Uses standard CSV module instead of Pandas and sends Teams notifications.
 """
 
 import os
+import csv
 import shutil
-import pandas as pd
+import json
 from datetime import datetime
 from typing import List, Dict
 
+from orchestration_play.blocks.notifications.teams_webhook import TeamsWebhook
 from prefect import flow, task
 from prefect.logging import get_run_logger
 
@@ -32,6 +35,8 @@ ALERT_THRESHOLDS = {
 
 # Default storage block name
 DEFAULT_BLOCK_NAME = "dev-metrics-storage"
+# Teams webhook block name
+TEAMS_WEBHOOK_BLOCK = "weather-teams-webhook"
 
 @task
 def ensure_directories():
@@ -80,13 +85,49 @@ def load_storage_block(block_name: str):
         logger.error(f"Failed to load metrics storage block '{block_name}': {str(e)}")
         raise
 
-@task(retries=2)
-def process_csv_file(file_path: str) -> Dict:
+@task
+def load_teams_webhook():
     """
-    Process a CSV file with network metrics.
+    Load the Teams webhook notification block.
+    
+    Returns:
+        Loaded Teams webhook block
+    """
+    logger = get_run_logger()
+    logger.info(f"Loading Teams webhook block: {TEAMS_WEBHOOK_BLOCK}")
+    
+    try:
+        teams_block = TeamsWebhook.load(TEAMS_WEBHOOK_BLOCK)
+        logger.info(f"Successfully loaded Teams webhook block")
+        return teams_block
+    except Exception as e:
+        logger.error(f"Failed to load Teams webhook block: {str(e)}")
+        logger.warning("Continuing without Teams notifications")
+        return None
+
+@task
+def notify_teams(teams_block, message, title=None):
+    """Send notification to Teams."""
+    if not teams_block:
+        return False
+    
+    logger = get_run_logger()
+    try:
+        teams_block.notify(message)
+        logger.info(f"Teams notification sent: {message[:100]}...")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send Teams notification: {str(e)}")
+        return False
+
+@task(retries=2)
+def process_csv_file(file_path: str, teams_block) -> Dict:
+    """
+    Process a CSV file with network metrics using standard CSV module.
     
     Args:
         file_path: Path to the CSV file
+        teams_block: Teams webhook for notifications
         
     Returns:
         Dictionary with processing results
@@ -104,59 +145,84 @@ def process_csv_file(file_path: str) -> Dict:
     }
     
     try:
-        # Read CSV file
-        df = pd.read_csv(file_path)
-        
-        # Validate required columns
+        # Required columns
         required_columns = [
             "timestamp", "device_id", "latency_ms", 
             "packet_loss_percent", "bandwidth_mbps", 
             "jitter_ms", "signal_strength_dbm"
         ]
         
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            error_msg = f"Missing columns: {', '.join(missing_columns)}"
-            logger.error(f"File {filename}: {error_msg}")
-            result["errors"].append(error_msg)
-            return result
-        
-        # Basic data cleaning
-        # Convert timestamp to datetime
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
-        # Remove duplicates
-        initial_count = len(df)
-        df.drop_duplicates(inplace=True)
-        duplicates_removed = initial_count - len(df)
-        if duplicates_removed > 0:
-            logger.info(f"Removed {duplicates_removed} duplicate rows from {filename}")
-        
-        # Handle missing values
-        df.dropna(inplace=True)
-        
-        # Detect anomalies
+        # Process the CSV file
+        metrics = []
         anomalies = []
-        for metric, threshold in ALERT_THRESHOLDS.items():
-            if metric in df.columns:
-                anomalous_rows = df[df[metric] > threshold]
-                if not anomalous_rows.empty:
-                    for _, row in anomalous_rows.iterrows():
-                        anomaly = {
-                            "timestamp": row["timestamp"],
-                            "device_id": row["device_id"],
-                            "metric": metric,
-                            "value": float(row[metric]),
-                            "threshold": threshold
-                        }
-                        anomalies.append(anomaly)
-                        logger.warning(
-                            f"Anomaly in {filename}: {row['device_id']} "
-                            f"{metric}={row[metric]} (threshold: {threshold})"
-                        )
+        duplicates = set()  # Track duplicates
         
-        # Prepare metrics data
-        metrics = df.to_dict('records')
+        with open(file_path, 'r', newline='') as csvfile:
+            # Read header
+            reader = csv.DictReader(csvfile)
+            
+            # Validate columns
+            missing_columns = [col for col in required_columns if col not in reader.fieldnames]
+            if missing_columns:
+                error_msg = f"Missing columns: {', '.join(missing_columns)}"
+                logger.error(f"File {filename}: {error_msg}")
+                result["errors"].append(error_msg)
+                
+                # Send Teams notification for missing columns
+                if teams_block:
+                    notify_teams(
+                        teams_block,
+                        f"⚠️ Error in file {filename}: {error_msg}"
+                    )
+                return result
+            
+            # Process rows
+            for row in reader:
+                # Skip if any required column is empty
+                if any(not row.get(col) for col in required_columns):
+                    continue
+                
+                # Create a unique key for duplicate detection
+                row_key = f"{row['timestamp']}_{row['device_id']}"
+                if row_key in duplicates:
+                    continue
+                duplicates.add(row_key)
+                
+                # Convert string values to appropriate types
+                try:
+                    # Convert numeric values
+                    for key in row:
+                        if key in ["latency_ms", "packet_loss_percent", "bandwidth_mbps", 
+                                  "jitter_ms", "signal_strength_dbm"]:
+                            row[key] = float(row[key])
+                    
+                    # Check for anomalies
+                    for metric, threshold in ALERT_THRESHOLDS.items():
+                        if metric in row and float(row[metric]) > threshold:
+                            anomaly = {
+                                "timestamp": row["timestamp"],
+                                "device_id": row["device_id"],
+                                "metric": metric,
+                                "value": float(row[metric]),
+                                "threshold": threshold
+                            }
+                            anomalies.append(anomaly)
+                            logger.warning(
+                                f"Anomaly in {filename}: {row['device_id']} "
+                                f"{metric}={row[metric]} (threshold: {threshold})"
+                            )
+                            
+                            # Send Teams notification for anomaly
+                            if teams_block:
+                                notify_teams(
+                                    teams_block,
+                                    f"🚨 Anomaly detected: Device {row['device_id']} has {metric}={row[metric]} (threshold: {threshold})"
+                                )
+                    
+                    # Add to metrics list
+                    metrics.append(row)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping row with invalid data: {str(e)}")
         
         # Update result
         result["success"] = True
@@ -171,11 +237,18 @@ def process_csv_file(file_path: str) -> Dict:
         error_msg = str(e)
         logger.error(f"Error processing {filename}: {error_msg}")
         result["errors"].append(error_msg)
+        
+        # Send Teams notification for processing error
+        if teams_block:
+            notify_teams(
+                teams_block,
+                f"🔥 Error processing file {filename}: {error_msg[:200]}"
+            )
     
     return result
 
 @task(retries=2)
-def store_metrics(metrics_storage_block, metrics, filename):
+def store_metrics(metrics_storage_block, metrics, filename, teams_block):
     """
     Store metrics in MongoDB.
     
@@ -183,6 +256,7 @@ def store_metrics(metrics_storage_block, metrics, filename):
         metrics_storage_block: The storage block to use
         metrics: List of metrics to store
         filename: Source filename for error reporting
+        teams_block: Teams webhook for notifications
         
     Returns:
         Success status
@@ -201,14 +275,30 @@ def store_metrics(metrics_storage_block, metrics, filename):
             logger.info(f"Successfully stored metrics for {filename}")
             return True
         else:
-            logger.error(f"Failed to store metrics for {filename}")
+            error_msg = f"Failed to store metrics for {filename}"
+            logger.error(error_msg)
+            
+            # Send Teams notification
+            if teams_block:
+                notify_teams(
+                    teams_block,
+                    f"❌ {error_msg}"
+                )
             return False
     except Exception as e:
-        logger.error(f"Error storing metrics for {filename}: {str(e)}")
+        error_msg = f"Error storing metrics for {filename}: {str(e)}"
+        logger.error(error_msg)
+        
+        # Send Teams notification
+        if teams_block:
+            notify_teams(
+                teams_block,
+                f"❌ {error_msg[:200]}"
+            )
         return False
 
 @task(retries=2)
-def store_anomalies(metrics_storage_block, anomalies, filename):
+def store_anomalies(metrics_storage_block, anomalies, filename, teams_block):
     """
     Store anomalies in MongoDB.
     
@@ -216,6 +306,7 @@ def store_anomalies(metrics_storage_block, anomalies, filename):
         metrics_storage_block: The storage block to use
         anomalies: List of anomalies to store
         filename: Source filename for error reporting
+        teams_block: Teams webhook for notifications
         
     Returns:
         Success status
@@ -234,10 +325,26 @@ def store_anomalies(metrics_storage_block, anomalies, filename):
             logger.info(f"Successfully stored anomalies for {filename}")
             return True
         else:
-            logger.warning(f"Failed to store anomalies for {filename}")
+            warning_msg = f"Failed to store anomalies for {filename}"
+            logger.warning(warning_msg)
+            
+            # Send Teams notification
+            if teams_block:
+                notify_teams(
+                    teams_block,
+                    f"⚠️ {warning_msg}"
+                )
             return False
     except Exception as e:
-        logger.warning(f"Error storing anomalies for {filename}: {str(e)}")
+        warning_msg = f"Error storing anomalies for {filename}: {str(e)}"
+        logger.warning(warning_msg)
+        
+        # Send Teams notification
+        if teams_block:
+            notify_teams(
+                teams_block,
+                f"⚠️ {warning_msg[:200]}"
+            )
         return False
 
 @task
@@ -282,6 +389,9 @@ def process_metrics_pipeline(block_name: str = DEFAULT_BLOCK_NAME):
     # Load the storage block
     metrics_storage_block = load_storage_block(block_name)
     
+    # Load Teams webhook
+    teams_block = load_teams_webhook()
+    
     # Get the list of CSV files
     csv_files = get_csv_files()
     
@@ -306,9 +416,16 @@ def process_metrics_pipeline(block_name: str = DEFAULT_BLOCK_NAME):
         "storage_block": block_name
     }
     
+    # Send initial notification
+    if teams_block:
+        notify_teams(
+            teams_block,
+            f"🔄 Starting network metrics processing for {len(csv_files)} files"
+        )
+    
     for file_path in csv_files:
         # Process the file
-        result = process_csv_file(file_path)
+        result = process_csv_file(file_path, teams_block)
         
         file_success = result["success"]
         
@@ -319,7 +436,8 @@ def process_metrics_pipeline(block_name: str = DEFAULT_BLOCK_NAME):
                 metrics_stored = store_metrics(
                     metrics_storage_block, 
                     result["metrics"], 
-                    result["file"]
+                    result["file"],
+                    teams_block
                 )
                 
                 if not metrics_stored:
@@ -331,7 +449,8 @@ def process_metrics_pipeline(block_name: str = DEFAULT_BLOCK_NAME):
                 store_anomalies(
                     metrics_storage_block, 
                     result["anomalies"], 
-                    result["file"]
+                    result["file"],
+                    teams_block
                 )
         
         # Move the file
@@ -353,6 +472,27 @@ def process_metrics_pipeline(block_name: str = DEFAULT_BLOCK_NAME):
                 f"{summary['failed_files']} files failed")
     logger.info(f"Total metrics stored: {summary['total_metrics']}")
     logger.info(f"Total anomalies detected: {summary['total_anomalies']}")
+    
+    # Send completion notification to Teams
+    if teams_block:
+        status_emoji = "✅" if summary["failed_files"] == 0 else "⚠️"
+        notify_teams(
+            teams_block,
+            f"{status_emoji} Network metrics processing complete:\n"
+            f"• Processed: {summary['total_files']} files\n"
+            f"• Successful: {summary['successful_files']} files\n"
+            f"• Failed: {summary['failed_files']} files\n"
+            f"• Metrics stored: {summary['total_metrics']}\n"
+            f"• Anomalies detected: {summary['total_anomalies']}"
+        )
+        
+        # Send errors report if any
+        if summary["errors"]:
+            errors_message = "🔥 Errors encountered:\n• " + "\n• ".join(summary["errors"][:10])
+            if len(summary["errors"]) > 10:
+                errors_message += f"\n...and {len(summary['errors']) - 10} more errors"
+            
+            notify_teams(teams_block, errors_message)
     
     return summary
 

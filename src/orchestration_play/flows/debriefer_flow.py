@@ -129,7 +129,7 @@ def process_and_analyze_articles(debriefer: Debriefer, articles: List[Dict]) -> 
             'url': original_article.get('url'),
             'original_score': original_article.get('score'),
             'original_reason': original_article.get('reason'),
-            'brief': brief.dump_model(),  # Convert pydantic model to dict
+            'brief': brief.model_dump(),  # Convert pydantic model to dict
             'analyzed_at': datetime.now()
         }
         

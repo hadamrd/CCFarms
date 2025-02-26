@@ -117,7 +117,7 @@ def process_and_analyze_articles(debriefer: Debriefer, articles: List[Dict]) -> 
         return []
     
     # Use Debriefer's built-in process_articles method
-    processed_briefs = debriefer._process_articles(articles)
+    processed_briefs = debriefer.process_articles(articles)
     
     # Convert to the format needed for storage
     analyzed_articles = []

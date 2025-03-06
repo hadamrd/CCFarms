@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: prefect
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "prefect"]
       interval: 5s
@@ -41,8 +43,10 @@ services:
       retries: 5
       start_period: 10s
 
-  prefect-worker:
-    image: prefecthq/prefect:2-latest
+  worker:
+    build:
+      context: .
+      dockerfile: WorkerDockerfile
     restart: always
     depends_on:
       prefect-server:
@@ -52,17 +56,15 @@ services:
     environment:
       - PREFECT_API_URL=http://prefect-server:4200/api
     volumes:
-      - ${PWD}:/opt/prefect/project
-    working_dir: /opt/prefect/project
-    command: >
-      bash -c 'pip install -e . && prefect worker start --pool "default-pool" --work-queue "default"'
+      - ./src:/app/src
+    command: bash -c "poetry install --only-root && poetry run prefect worker start --pool default-pool --work-queue default"
     healthcheck:
-      test: ["CMD-SHELL", "prefect work-pool inspect default-pool | grep -i 'status.*ready'"]
+      test: ["CMD-SHELL", "poetry run prefect work-pool inspect ${PREFECT_POOL_NAME:-default-pool} | grep -i 'status.*ready'"]
       interval: 3s
       timeout: 10s
       retries: 30
       start_period: 10s
-
+  
   mongodb:
     image: mongo:6
     environment:

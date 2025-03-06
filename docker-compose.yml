@@ -60,7 +60,7 @@ services:
       test: ["CMD-SHELL", "prefect work-pool inspect default-pool | grep -i 'status.*ready'"]
       interval: 3s
       timeout: 10s
-      retries: 5
+      retries: 30
       start_period: 10s
 
   mongodb:

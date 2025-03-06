@@ -1,16 +1,26 @@
 # src/orchestration_play/agents/digger.py
-from prefect import get_run_logger
-from autogen import AssistantAgent
-import re
+import os
 import json
+from typing import List, Dict, Optional
+from prefect import get_run_logger
+from datetime import datetime
 
-class Digger(AssistantAgent):
+from orchestration_play.agents.schema_agent import SchemaAgent
+
+class Digger(SchemaAgent):
     """
     AI agent that evaluates news articles for comedy potential on a scale of 1-10.
-    Uses the Anthropic Claude API via autogen to analyze articles.
+    Uses the SchemaAgent base class for structured prompting and response validation.
     """
     
-    def __init__(self, anthropic_api_key: str, news_client=None, article_cache=None, model: str = "claude-3-5-sonnet-20241022"):
+    def __init__(
+        self, 
+        anthropic_api_key: str, 
+        news_client=None, 
+        article_cache=None, 
+        model: str = "claude-3-5-sonnet-20241022",
+        schema_file: Optional[str] = None
+    ):
         """
         Initialize the Digger agent with required dependencies.
         
@@ -19,42 +29,36 @@ class Digger(AssistantAgent):
             news_client: Optional NewsAPI client (can be injected later)
             article_cache: Optional ArticleCache instance (can be injected later)
             model: Anthropic model to use
+            schema_file: Path to JSON schema file (optional)
         """
-        self.logger = get_run_logger()
+        # Set up the directory for this agent
+        self.agent_dir = os.path.dirname(os.path.abspath(__file__))
         
-        super().__init__(
-            name="NewsScout",
-            llm_config={
-                "config_list": [{
-                    "model": model,
-                    "api_key": anthropic_api_key,
-                    "api_base": "https://api.anthropic.com/v1/messages",
-                    "api_type": "anthropic",
-                }],
-                "temperature": 0.3,  # More factual
-                "timeout": 30,
-            },
-            system_message="""You are an AI Comedy Scout specializing in quick assessment of tech news comedy potential.
-            
-EXTREMELY SELECTIVE SCORING (1-10):
-1-3: Regular tech news, no comedy value
-4-6: Mildly interesting but not special
-7-8: Strong comedy potential (needs multiple):
-    - Clear tech industry ego/delusion
-    - Obvious irony or hypocrisy
-    - Rich personality-driven drama
-9-10: Comedy gold (extremely rare, needs all):
-    - Multiple layers of absurdity
-    - Perfect setup for satire
-    - Exceptional irony/controversy
-
-BE HARSH IN SCORING. Most articles should score below 7.
-Only truly exceptional stories deserve high scores.
-
-Always return score in <brief_json> format."""
+        # Load schema from file or use default
+        schema_path = schema_file or os.path.join(
+            self.agent_dir, 
+            "digger_schema.json"
         )
         
-        # These can be injected later if not provided during initialization
+        # Load schema from file or use a simple default schema
+        if os.path.exists(schema_path):
+            with open(schema_path, 'r') as f:
+                response_schema = json.load(f)
+        else:
+            raise ValueError("Schema file not found: " + schema_path)
+        
+        # Initialize base agent with JSON schema
+        super().__init__(
+            name="NewsScout",
+            response_schema=response_schema,
+            anthropic_api_key=anthropic_api_key,
+            model=model,
+            template_dir=self.agent_dir,
+            response_tag="brief_json",
+            temperature=0.3  # More factual
+        )
+        
+        self.logger = get_run_logger()
         self.news_client = news_client
         self.cache = article_cache
     
@@ -66,7 +70,7 @@ Always return score in <brief_json> format."""
         """Set the ArticleCache after initialization"""
         self.cache = article_cache
 
-    def quick_score_articles(self, articles: list[dict], threshold: int = 7) -> list[dict]:
+    def quick_score_articles(self, articles: List[Dict], threshold: int = 7) -> List[Dict]:
         """
         Quickly score articles based on title/description, returning those above threshold.
         
@@ -134,9 +138,9 @@ Always return score in <brief_json> format."""
 
         return sorted(scored_articles, key=lambda x: x['score'], reverse=True)
 
-    def _get_quick_score(self, article: dict) -> dict:
+    def _get_quick_score(self, article: Dict) -> Dict:
         """
-        Get quick comedy potential score for a single article.
+        Get quick comedy potential score for a single article using SchemaAgent.
         
         Args:
             article: Article dictionary with title and description
@@ -144,54 +148,20 @@ Always return score in <brief_json> format."""
         Returns:
             Dictionary with score and reason
         """
-        prompt = f"""
-        Rate comedy potential (1-10) for this tech news.
-        BE EXTREMELY SELECTIVE. Score of 7+ should be rare.
-        
-        Title: {article['title']}
-        Description: {article['description']}
-        
-        Return score and reason in <brief_json> format:
-        <brief_json>
-        {{
-            "score": number (1-10),
-            "reason": "one line explanation why this score"
-        }}
-        </brief_json>
-        """
-        
         try:
-            self.logger.debug(f"Sending prompt to Anthropic for article: {article['title']}")
-            response = self.generate_reply([{"content": prompt, "role": "user"}])
-            result = self._extract_json(response.get("content", ""))
-            return result
+            self.logger.debug(f"Scoring article: {article['title']}")
+            
+            # Use the base agent's process method with the score_prompt.j2 template
+            return self.process(
+                prompt_template="score_prompt.j2",
+                article=article
+            )
+            
         except Exception as e:
-            self.logger.error(f"Error scoring article: {e}")
+            self.logger.error(f"Error scoring article: {article.get('title', 'Unknown')}: {e}")
             return {"score": 0, "reason": f"Error in scoring: {str(e)}"}
 
-    def _extract_json(self, content: str) -> dict:
-        """
-        Extract JSON from between brief_json tags in the LLM response.
-        
-        Args:
-            content: Response content from Anthropic
-            
-        Returns:
-            Parsed JSON dictionary
-        """
-        pattern = r'<brief_json>(.*?)</brief_json>'
-        match = re.search(pattern, content, re.DOTALL)
-        if not match:
-            self.logger.error(f"No brief_json tags found in response: {content}")
-            raise ValueError("No brief_json tags found")
-        
-        try:
-            return json.loads(match.group(1).strip())
-        except json.JSONDecodeError:
-            self.logger.error(f"Invalid JSON in response: {match.group(1)}")
-            raise ValueError(f"Invalid JSON in response: {match.group(1)}")
-
-    def dig_for_news(self, query: str = "artificial intelligence", page_size: int = 20, threshold: int = 6) -> list[dict]:
+    def dig_for_news(self, query: str = "artificial intelligence", page_size: int = 20, threshold: int = 6) -> List[Dict]:
         """
         Main method to fetch and score news articles.
         

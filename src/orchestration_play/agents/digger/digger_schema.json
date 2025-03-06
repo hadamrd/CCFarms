@@ -1,0 +1,17 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["score", "reason"],
+    "properties": {
+        "score": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 10,
+        "description": "Comedy potential score from 0-10"
+        },
+        "reason": {
+        "type": "string",
+        "description": "One line explanation for the score"
+        }
+    }
+}

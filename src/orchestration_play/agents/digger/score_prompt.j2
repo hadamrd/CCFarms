@@ -1,0 +1,12 @@
+Rate comedy potential (1-10) for this tech news.
+BE EXTREMELY SELECTIVE. Score of 7+ should be rare.
+
+Title: {{ article.title }}
+Description: {{ article.description }}
+
+Return score and reason in <{{ response_tag }}> format with valid JSON that conforms to this schema:
+```json
+{{ response_schema }}
+```
+
+Remember to be extremely selective. A score of 7+ should only be given to articles with exceptional comedy potential.

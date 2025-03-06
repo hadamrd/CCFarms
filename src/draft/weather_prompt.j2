@@ -1,0 +1,31 @@
+Create a detailed weather report for {{ location }} based on the following data:
+
+CURRENT CONDITIONS:
+- Temperature: {{ current_temp }}
+- Description: {{ current_desc }}
+- Wind Speed: {{ wind_speed }}
+- Humidity: {{ humidity }}
+
+{% if forecast_data %}
+FORECAST:
+{% for day in forecast_data %}
+{{ day.date }} ({{ day.day }}):
+- High: {{ day.maxtempC }}°C
+- Low: {{ day.mintempC }}°C
+- Description: {{ day.hourly[4].weatherDesc[0].value }}
+{% endfor %}
+{% else %}
+Forecast data is unavailable.
+{% endif %}
+
+Based on this information, provide a complete weather report with:
+1. Current conditions formatted nicely
+2. Forecast for the upcoming days
+3. Recommendations for clothing and activities that are appropriate for this weather
+
+Your response must be valid JSON wrapped in <{{ response_tag }}> tags and must conform to this schema:
+```json
+{{ response_schema }}
+```
+
+Be helpful, accurate, and practical in your recommendations.

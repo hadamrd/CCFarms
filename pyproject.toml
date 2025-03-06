@@ -5,6 +5,7 @@ description = "Orchestration flows with Prefect"
 authors = ["Khalid MAJDOUB <khalid.majdoub@sidetrade.com>"]
 packages = [
     { include = "orchestration_play", from = "src" },
+    { include = "draft", from = "src" },
 ]
 
 [tool.poetry.dependencies]

@@ -1,0 +1,96 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["current_conditions", "forecast", "recommendations"],
+    "properties": {
+      "current_conditions": {
+        "type": "object",
+        "required": ["temperature", "description", "wind", "humidity"],
+        "properties": {
+          "temperature": {
+            "type": "string",
+            "description": "Current temperature with unit"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text description of current weather"
+          },
+          "wind": {
+            "type": "string",
+            "description": "Wind speed and direction"
+          },
+          "humidity": {
+            "type": "string",
+            "description": "Current humidity percentage"
+          }
+        }
+      },
+      "forecast": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["day", "high", "low", "description"],
+          "properties": {
+            "day": {
+              "type": "string",
+              "description": "Day of the week"
+            },
+            "high": {
+              "type": "string",
+              "description": "Forecast high temperature"
+            },
+            "low": {
+              "type": "string",
+              "description": "Forecast low temperature"
+            },
+            "description": {
+              "type": "string",
+              "description": "Text description of forecast weather"
+            }
+          }
+        },
+        "description": "Weather forecast for upcoming days",
+        "minItems": 1,
+        "maxItems": 5
+      },
+      "recommendations": {
+        "type": "object",
+        "required": ["clothing", "activities"],
+        "properties": {
+          "clothing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Recommended clothing items for the weather",
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "activities": {
+            "type": "object",
+            "required": ["recommended", "not_recommended"],
+            "properties": {
+              "recommended": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Activities suitable for the weather",
+                "minItems": 1,
+                "maxItems": 3
+              },
+              "not_recommended": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Activities not suitable for the weather",
+                "minItems": 1,
+                "maxItems": 3
+              }
+            }
+          }
+        }
+      }
+    }
+  }

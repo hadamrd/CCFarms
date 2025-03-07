@@ -1,45 +1,37 @@
 # src/orchestration_play/flows/debriefer_flow.py
+from orchestration_play.persistence.brief_storage import BriefStorage
 from prefect import flow, task, get_run_logger
 from prefect.task_runners import SequentialTaskRunner
 from prefect.blocks.system import Secret
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from datetime import datetime
 
 from orchestration_play.blocks import NewsAPIBlock, ArticleCacheBlock, BriefStorageBlock, TeamsWebhook
 from orchestration_play.agents import Debriefer
 
 
-def safe_model_dump(model: Any) -> Dict:
-    if hasattr(model, "model_dump"):
-        # Pydantic v2
-        return model.model_dump()
-    elif hasattr(model, "dict"):
-        # Pydantic v1
-        return model.dict()
-    else:
-        # Fallback approach
-        return {k: getattr(model, k) for k in model.__annotations__}
-
-
 @task(name="Initialize Debriefer Agent")
 def init_debriefer(api_key: str) -> Debriefer:
+    """Initialize the Debriefer agent with API key"""
     return Debriefer(anthropic_api_key=api_key)
 
 
 @task(name="Load Dependencies")
 def load_dependencies(debriefer: Debriefer, news_api_block_name: str) -> Debriefer:
+    """Load and inject dependencies into the Debriefer agent"""
     # Load NewsAPI client
     news_block = NewsAPIBlock.load(news_api_block_name)
     news_client = news_block.get_client()
     
     # Set news client in debriefer
-    debriefer.news_client = news_client
+    debriefer.set_news_client(news_client)
     
     return debriefer
 
 
 @task(name="Get Top Articles")
 def get_top_articles(article_cache_block_name: str, brief_storage_block_name: str, limit: int = 5, reanalyze_existing: bool = False) -> List[Dict]:
+    """Retrieve top articles from cache, filtering already briefed ones unless reanalysis requested"""
     logger = get_run_logger()
     logger.info(f"Retrieving top articles from cache (limit: {limit}, reanalyze: {reanalyze_existing})")
     
@@ -94,90 +86,64 @@ def get_top_articles(article_cache_block_name: str, brief_storage_block_name: st
     logger.info(f"Selected {len(top_articles)} articles for analysis")
     return top_articles
 
+
 @task(name="Initialize Brief Storage")
-def init_brief_storage(brief_storage_block_name: str):
+def init_brief_storage(brief_storage_block_name: str) -> BriefStorage:
+    """Initialize the brief storage from a block"""
     brief_block = BriefStorageBlock.load(brief_storage_block_name)
     return brief_block.get_brief_storage()
 
 
 @task(name="Analyze and Store Article", retries=2, retry_delay_seconds=60)
 def analyze_and_store_article(debriefer: Debriefer, article: Dict, brief_storage) -> Optional[Dict]:
+    """Analyze a single article and store its brief"""
     logger = get_run_logger()
     
     try:
         logger.info(f"Analyzing article: {article.get('title')}")
         
-        # First make sure we have the URL to fetch content
+        # Fetch and prepare article content
         url = article.get('url')
         if not url:
             logger.warning(f"Skipping article with no URL: {article.get('title')}")
             return None
         
-        # Fetch article content
-        try:
-            # Try both method names for compatibility
-            if hasattr(debriefer.news_client, "fetch_article_content"):
-                content = debriefer.news_client.fetch_article_content(url)
-            elif hasattr(debriefer.news_client, "_fetch_article_content"):
-                content = debriefer.news_client.fetch_article_content(url)
-            else:
-                logger.error("News client has no fetch_article_content method")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching content: {str(e)}")
-            return None
-            
+        content = debriefer.news_client.fetch_article_content(url)
         if not content:
             logger.warning(f"Could not fetch content for: {url}")
             return None
             
-        # Add content to article for analysis
         article_with_content = article.copy()
         article_with_content['content'] = content
         
-        # Analyze the article
-        brief = debriefer.analyze_article(article_with_content)
+        # Analyze the article - returns whatever structure the model produces
+        model_output = debriefer.analyze_article(article_with_content)
         
-        # Create analyzed article with brief
-        analyzed_article = {
-            'article_id': article.get('_id'),
-            'title': article.get('title'),
-            'url': article.get('url'),
-            'original_score': article.get('score'),
-            'original_reason': article.get('reason'),
-            'brief': safe_model_dump(brief),
-            'analyzed_at': datetime.now()
-        }
-        
-        # Store brief immediately after successful analysis
+        # Store the output directly without any structure assumptions
+        article_id = article.get('_id')
         brief_storage.store_brief(
-            article_id=analyzed_article['article_id'],
-            title=analyzed_article['title'],
-            url=analyzed_article['url'],
-            original_score=analyzed_article['original_score'],
-            original_reason=analyzed_article['original_reason'],
-            brief_data=analyzed_article['brief'],
-            analyzed_at=analyzed_article['analyzed_at']
+            article_id=article_id,
+            model_output=model_output,
+            metadata={
+                "title": article.get('title'),
+                "url": article.get('url')
+            }
         )
         
-        # Add this to analyze_and_store_article function after storing the brief
-        # Verify the brief was stored
-        verification = brief_storage.check_article_briefed(analyzed_article['article_id'])
-        if verification:
-            logger.info(f"Verified brief was successfully stored for: {article.get('title')}")
-        else:
-            logger.warning(f"Could not verify brief storage for: {article.get('title')}")
-    
-        logger.info(f"Successfully analyzed and stored brief for: {article.get('title')}")
-        return analyzed_article
+        # Return the full article and model output for logging
+        return {
+            'article_id': article_id,
+            'title': article.get('title'),
+            'model_output': model_output
+        }
         
     except Exception as e:
         logger.error(f"Error analyzing article {article.get('title')}: {str(e)}")
         return None
 
-
 @task(name="Analyze Multiple Articles")
-def analyze_articles(debriefer: Debriefer, articles: List[Dict], brief_storage) -> List[Dict]:
+def analyze_articles(debriefer: Debriefer, articles: List[Dict], brief_storage: BriefStorage) -> List[Dict]:
+    """Process a batch of articles with the Debriefer agent"""
     logger = get_run_logger()
     logger.info(f"Starting detailed analysis of {len(articles)} articles")
     
@@ -198,6 +164,7 @@ def analyze_articles(debriefer: Debriefer, articles: List[Dict], brief_storage) 
 
 @task(name="Log Results")
 def log_results(analyzed_articles: List[Dict]) -> str:
+    """Log and summarize the analysis results"""
     logger = get_run_logger()
     
     if not analyzed_articles:
@@ -211,10 +178,21 @@ def log_results(analyzed_articles: List[Dict]) -> str:
     summary_lines = []
     for idx, article in enumerate(analyzed_articles, 1):
         brief = article.get('brief', {})
-        core_story = brief.get('core_story', {})
+        
+        # Access fields using dictionary syntax
         summary_lines.append(f"{idx}. {article['title']}")
-        if core_story and 'simple_summary' in core_story:
-            summary_lines.append(f"   {core_story['simple_summary']}")
+        
+        # Check for summary field directly in brief
+        if 'summary' in brief:
+            summary_lines.append(f"   {brief['summary']}")
+        # Fall back to core_story if it exists
+        elif 'core_story' in brief and isinstance(brief['core_story'], dict):
+            core_story = brief['core_story']
+            if 'simple_summary' in core_story:
+                summary_lines.append(f"   {core_story['simple_summary']}")
+        # Add comedy potential if available
+        if 'comedy_potential' in brief:
+            summary_lines.append(f"   Comedy Potential: {brief['comedy_potential']}/10")
     
     summary = "\n".join(summary_lines)
     logger.info(f"\nAnalysis Summary:\n{summary}")
@@ -229,6 +207,7 @@ def debriefer_flow(
     article_cache_block_name: str = "dev-article-cache",
     brief_storage_block_name: str = "dev-brief-storage",
 ):
+    """Flow to analyze top articles for comedy potential and store detailed briefs"""
     logger = get_run_logger()
     logger.info(f"Starting debriefer flow with limit {articles_limit}, reanalyze_existing={reanalyze_existing}")
     

@@ -1,50 +1,86 @@
-import json
 import os
-from autogen import AssistantAgent
-from orchestration_play.agents.debriefer.models import ArticleBrief
-from orchestration_play.clients.news_client import NewsAPIClient
+import json
+from typing import List, Dict, Optional
 from prefect import get_run_logger
 import requests
-from typing import List, Dict
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-import re
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from orchestration_play.agents.schema_agent import SchemaAgent
+from orchestration_play.clients.news_client import NewsAPIClient
 
-CURRDIR = os.path.dirname(os.path.abspath(__file__))
 
-template_env = env = Environment(
-    loader=FileSystemLoader(CURRDIR),
-    autoescape=select_autoescape(["html", "xml"]),
-    trim_blocks=True,
-    lstrip_blocks=True
-)
-
-class Debriefer(AssistantAgent):
-    def __init__(self, anthropic_api_key: str, news_client: NewsAPIClient=None, model: str = "claude-3-5-sonnet-20241022"):
-        system_message = template_env.get_template('system_message.j2').render()
+class Debriefer(SchemaAgent):
+    """
+    AI agent that performs detailed analysis on news articles.
+    Uses the SchemaAgent base class for structured prompting and response validation.
+    """
+    
+    def __init__(
+        self,
+        anthropic_api_key: str,
+        news_client: Optional[NewsAPIClient] = None,
+        model: str = "claude-3-5-sonnet-20241022",
+        schema_file: Optional[str] = None
+    ):
+        """
+        Initialize the Debriefer agent with required dependencies.
         
-        super().__init__(
-            name="NewsScout",
-            llm_config={
-                    "config_list": [{
-                        "model": model,
-                        "api_key": anthropic_api_key,
-                        "api_base": "https://api.anthropic.com/v1/messages",
-                        "api_type": "anthropic",
-                    }],
-                    "temperature": 0.3,  # More factual
-                    "timeout": 30,
-            },
-            system_message=system_message
+        Args:
+            anthropic_api_key: API key for Anthropic
+            news_client: Optional NewsAPI client (can be injected later)
+            model: Anthropic model to use
+            schema_file: Path to JSON schema file (optional)
+        """
+        # Set up the directory for this agent
+        self.agent_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Load schema from file or use default
+        schema_path = schema_file or os.path.join(
+            self.agent_dir,
+            "debriefer_schema.json"
         )
+        
+        # Load schema from file or use a simple default schema
+        if os.path.exists(schema_path):
+            with open(schema_path, 'r') as f:
+                response_schema = json.load(f)
+        else:
+            raise ValueError("Schema file not found: " + schema_path)
+        
+        # Initialize base agent with JSON schema
+        super().__init__(
+            name="NewsDebriefer",
+            response_schema=response_schema,
+            anthropic_api_key=anthropic_api_key,
+            model=model,
+            template_dir=self.agent_dir,
+            response_tag="brief_json",
+            temperature=0.3
+        )
+        
         self.logger = get_run_logger()
+        self.news_client = news_client
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': 'AINewsBot/1.0'})
+    
+    def set_news_client(self, news_client: NewsAPIClient):
+        """Set the NewsAPI client after initialization"""
         self.news_client = news_client
-
-    def process_articles(self, raw_articles: List[Dict]) -> List[ArticleBrief]:
-        """Sanitize and enrich articles with full content before analysis"""
+    
+    def process_articles(self, raw_articles: List[Dict]) -> List[Dict]:
+        """
+        Process a batch of articles by fetching full content and analyzing them.
+        
+        Args:
+            raw_articles: List of article dictionaries from NewsAPI
+            
+        Returns:
+            List of validated article analysis results as dictionaries
+        """
+        if not self.news_client:
+            self.logger.error("NewsAPI client not set - call set_news_client() first")
+            raise ValueError("NewsAPI client not initialized")
+            
         processed = []
+        
         for article in raw_articles:
             try:
                 # First get the full content
@@ -63,61 +99,92 @@ class Debriefer(AssistantAgent):
 
                 # Now analyze with full content
                 try:
-                    brief = self.analyze_article(article)
-                    processed.append(brief)
+                    analysis_result = self.analyze_article(article)
+                    # Add the URL to the result
+                    analysis_result['url'] = url
+                    processed.append(analysis_result)
                     self.logger.info(f"Successfully analyzed article: {article.get('title')}")
                 except Exception as e:
                     self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
                 
             except Exception as e:
-                self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
+                self.logger.error(f"Processing failed for {article.get('title', 'Unknown')}: {str(e)}")
                 
         return processed
-
-    def _build_analysis_prompt(self, article: Dict) -> str:
-        """Generate prompt using template with full content"""
-        template = template_env.get_template('analyse_prompt.j2')
-        return template.render(
-            article=article.get('title', ''),
-            content=article.get('content', ''),
-        )
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(
-            multiplier=1,
-            max=60
-        )
-    )
-    def analyze_article(self, article: Dict) -> ArticleBrief:
-        """Analyze a single article for comedy potential"""
-        try:
-            prompt = self._build_analysis_prompt(article)
-            self.logger.info(f"Sending analysis request for: {article.get('title')}")
-            
-            response = self.generate_reply([{"content": prompt, "role": "user"}])
-            
-            if not response or "content" not in response:
-                self.logger.error(f"Empty or invalid response for {article.get('title')}")
-                raise ValueError("Empty or invalid response from LLM")
-            
-            self.logger.info(f"Received response: {response}")
-            # Parse the tagged response into ArticleBrief
-            brief_json = self._extract_tagged_json(response.get("content", ""))
-            return ArticleBrief(**brief_json)
-        except Exception as e:
-            self.logger.error(f"Error in analyze_article: {str(e)}")
-            raise  # Re-raise for retry
+    
+    def analyze_article(self, article: Dict) -> Dict:
+        """
+        Analyze a single article using SchemaAgent processing.
         
-    def _extract_tagged_json(self, content: str) -> Dict:
-        """Extract JSON from between brief_json tags"""
-        pattern = r'<brief_json>(.*?)</brief_json>'
-        match = re.search(pattern, content, re.DOTALL)
-        if not match:
-            raise ValueError("No brief_json tags found in response")
-        json_str = match.group(1).strip()
+        Args:
+            article: Article dictionary with title and content
+            
+        Returns:
+            Dictionary with analysis results conforming to schema
+        """
         try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Invalid JSON in response: {json_str[:500]}...")
-            raise ValueError(f"Invalid JSON in response: {str(e)}")
+            self.logger.info(f"Analyzing article: {article.get('title')}")
+            
+            # Use the base agent's process method with the analyze_prompt.j2 template
+            return self.process(
+                prompt_template="analyze_prompt.j2",
+                article=article
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error analyzing article: {article.get('title', 'Unknown')}: {e}")
+            raise  # Allow for retry logic to be handled by caller
+    
+    def analyze_single_url(self, url: str) -> Dict:
+        """
+        Fetch and analyze a single article by URL.
+        
+        Args:
+            url: URL of the article to analyze
+            
+        Returns:
+            Dictionary with analysis results conforming to schema
+        """
+        if not self.news_client:
+            self.logger.error("NewsAPI client not set - call set_news_client() first")
+            raise ValueError("NewsAPI client not initialized")
+            
+        try:
+            # Fetch content
+            content = self.news_client.fetch_article_content(url)
+            if not content:
+                raise ValueError(f"Could not fetch content for URL: {url}")
+                
+            # Create a minimal article object
+            article = {
+                'url': url,
+                'title': self._extract_title_from_content(content),
+                'content': content
+            }
+            
+            # Analyze it
+            analysis_result = self.analyze_article(article)
+            # Add URL to result
+            analysis_result['url'] = url
+            return analysis_result
+            
+        except Exception as e:
+            self.logger.error(f"Error analyzing URL {url}: {str(e)}")
+            raise
+    
+    def _extract_title_from_content(self, content: str) -> str:
+        """
+        Extract title from HTML content if possible.
+        This is a simple fallback when title isn't provided.
+        
+        Args:
+            content: HTML content of the article
+            
+        Returns:
+            Extracted title or placeholder
+        """
+        import re
+        title_match = re.search(r'<title>(.*?)</title>', content, re.IGNORECASE)
+        if title_match:
+            return title_match.group(1)
+        return "Unknown Title"

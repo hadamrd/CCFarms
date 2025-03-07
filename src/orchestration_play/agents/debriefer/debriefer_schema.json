@@ -1,0 +1,69 @@
+{
+    "type": "object",
+    "properties": {
+        "title": {
+            "type": "string"
+        },
+        "satirical_headlines": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "maxItems": 3
+        },
+        "summary": {
+            "type": "string"
+        },
+        "core_absurdity": {
+            "type": "string"
+        },
+        "key_points": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "maxItems": 5
+        },
+        "comedy_potential": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+        },
+        "comedy_angles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "approach": {
+                        "type": "string"
+                    },
+                    "sample_line": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "approach",
+                    "sample_line"
+                ]
+            },
+            "maxItems": 3
+        },
+        "target_audience": {
+            "type": "string"
+        },
+        "sensitive_elements": {
+            "type": "string"
+        },
+        "news_category": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "title",
+        "summary",
+        "core_absurdity",
+        "comedy_potential",
+        "comedy_angles",
+        "news_category"
+    ]
+}

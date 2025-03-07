@@ -2,7 +2,6 @@ import os
 import json
 from typing import List, Dict, Optional
 from prefect import get_run_logger
-import requests
 from orchestration_play.agents.schema_agent import SchemaAgent
 from orchestration_play.clients.news_client import NewsAPIClient
 
@@ -38,7 +37,7 @@ class Debriefer(SchemaAgent):
             "debriefer_schema.json"
         )
         
-        # Load schema from file or use a simple default schema
+        # Load schema from file
         if os.path.exists(schema_path):
             with open(schema_path, 'r') as f:
                 response_schema = json.load(f)
@@ -58,8 +57,6 @@ class Debriefer(SchemaAgent):
         
         self.logger = get_run_logger()
         self.news_client = news_client
-        self.session = requests.Session()
-        self.session.headers.update({'User-Agent': 'AINewsBot/1.0'})
     
     def set_news_client(self, news_client: NewsAPIClient):
         """Set the NewsAPI client after initialization"""

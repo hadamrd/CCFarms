@@ -40,7 +40,7 @@ class BriefStorage:
         """Store any model output JSON with minimal required metadata"""
         document = {
             "article_id": article_id,
-            "model_output": model_output,  # Store the raw model output as-is
+            "model_output": model_output,
             "timestamp": datetime.now()
         }
         
@@ -93,7 +93,7 @@ class BriefStorage:
                 "timestamp", -1
             ).limit(limit)
             
-            return [{**doc, "_id": str(doc["_id"])} for doc in results]
+            return [{'doc': doc, "_id": str(doc["_id"])} for doc in results]
             
         except PyMongoError as e:
             print(f"Error retrieving briefs: {e}")

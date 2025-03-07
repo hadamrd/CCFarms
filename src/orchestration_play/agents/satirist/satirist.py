@@ -1,72 +1,63 @@
-import json
 import os
-from typing import List, Dict
+import json
+from typing import List, Dict, Optional
 from datetime import datetime
-from autogen import AssistantAgent
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 from prefect import get_run_logger
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-import re
+from orchestration_play.agents.schema_agent import SchemaAgent
 
-CURRDIR = os.path.dirname(os.path.abspath(__file__))
 
-template_env = Environment(
-    loader=FileSystemLoader(CURRDIR),
-    autoescape=select_autoescape(["html", "xml"]),
-    trim_blocks=True,
-    lstrip_blocks=True
-)
-
-class Satirist(AssistantAgent):
-    def __init__(self, anthropic_api_key: str, model: str = "claude-3-5-sonnet-20241022"):
+class Satirist(SchemaAgent):
+    """
+    AI agent that generates comedy scripts from analyzed news briefs.
+    Uses the SchemaAgent base class for structured prompting and response validation.
+    """
+    
+    def __init__(
+        self,
+        anthropic_api_key: str,
+        model: str = "claude-3-5-sonnet-20241022",
+        schema_file: Optional[str] = None,
+        temperature: float = 0.7  # Higher creativity for comedy
+    ):
         """
-        Initialize the Satirist agent for generating comedy scripts from analyzed news briefs.
+        Initialize the Satirist agent for generating comedy scripts.
         
         Args:
             anthropic_api_key: API key for Anthropic's Claude
             model: The LLM model to use
+            schema_file: Path to JSON schema file (optional)
+            temperature: Model temperature (higher for more creative comedy)
         """
-        system_message = template_env.get_template('system_message.j2').render()
+        # Set up the directory for this agent
+        self.agent_dir = os.path.dirname(os.path.abspath(__file__))
         
+        # Load schema from file or use default
+        schema_path = schema_file or os.path.join(
+            self.agent_dir,
+            "satirist_schema.json"
+        )
+        
+        # Load schema from file
+        if os.path.exists(schema_path):
+            with open(schema_path, 'r') as f:
+                response_schema = json.load(f)
+        else:
+            raise ValueError("Schema file not found: " + schema_path)
+        
+        # Initialize base agent with JSON schema
         super().__init__(
             name="NewsComedian",
-            llm_config={
-                "config_list": [{
-                    "model": model,
-                    "api_key": anthropic_api_key,
-                    "api_base": "https://api.anthropic.com/v1/messages",
-                    "api_type": "anthropic",
-                }],
-                "temperature": 0.7,  # Higher creativity for comedy
-                "timeout": 45,
-            },
-            system_message=system_message
+            response_schema=response_schema,
+            anthropic_api_key=anthropic_api_key,
+            model=model,
+            template_dir=self.agent_dir,
+            system_message_template="system_message.j2",
+            response_tag="comedy_script",
+            temperature=temperature
         )
-        self.logger = get_run_logger()
-
-    def _build_script_prompt(self, analyzed_articles: List[Dict]) -> str:
-        """
-        Generate prompt for the satirist using the template with analyzed articles.
         
-        Args:
-            analyzed_articles: List of analyzed article briefs
-            
-        Returns:
-            Formatted prompt string
-        """
-        template = template_env.get_template('prompt.j2')
-        return template.render(
-            briefs=analyzed_articles,
-            date=datetime.now().strftime("%A, %B %d, %Y")
-        )
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(
-            multiplier=1,
-            max=60
-        )
-    )
+        self.logger = get_run_logger()
+    
     def generate_comedy_script(self, analyzed_articles: List[Dict]) -> Dict:
         """
         Generate a comedy script based on the analyzed articles.
@@ -78,47 +69,28 @@ class Satirist(AssistantAgent):
             Dictionary containing the comedy script and metadata
         """
         try:
-            prompt = self._build_script_prompt(analyzed_articles)
             self.logger.info(f"Generating comedy script for {len(analyzed_articles)} articles")
             
-            response = self.generate_reply([{"content": prompt, "role": "user"}])
+            # Convert datetime to string to avoid serialization issues
+            current_date = datetime.now().strftime("%A, %B %d, %Y")
             
-            if not response or "content" not in response:
-                self.logger.error("Empty or invalid response from LLM")
-                raise ValueError("Empty or invalid response from LLM")
+            # Use the base SchemaAgent's process method with the prompt.j2 template
+            script_data = self.process(
+                prompt_template="prompt.j2",
+                briefs=analyzed_articles,
+                date=current_date
+            )
             
-            # Parse the tagged response
-            script_data = self._extract_tagged_json(response.get("content", ""))
-            
+            # Add metadata to the result
             result = {
-                "script": script_data,
-                "source_articles": [article.get("article_id") for article in analyzed_articles],
+                "script_data": script_data,
+                "source_articles": [article.get("article_id", article.get("url", "unknown")) for article in analyzed_articles],
                 "generated_at": datetime.now().isoformat(),
                 "article_count": len(analyzed_articles)
             }
             
             return result
+            
         except Exception as e:
             self.logger.error(f"Error in generate_comedy_script: {str(e)}")
-            raise  # Re-raise for retry
-        
-    def _extract_tagged_json(self, content: str) -> Dict:
-        """
-        Extract JSON from between comedy_script tags in the LLM response.
-        
-        Args:
-            content: Raw LLM response
-            
-        Returns:
-            Parsed JSON content
-        """
-        pattern = r'<comedy_script>(.*?)</comedy_script>'
-        match = re.search(pattern, content, re.DOTALL)
-        if not match:
-            raise ValueError("No comedy_script tags found in response")
-        json_str = match.group(1).strip()
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Invalid JSON in response: {json_str[:500]}...")
-            raise ValueError(f"Invalid JSON in response: {str(e)}")
+            raise  # Re-raise for retry logic to be handled by caller

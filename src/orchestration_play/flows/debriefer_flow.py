@@ -205,7 +205,7 @@ def debriefer_flow(
     reanalyze_existing: bool = False,
     news_api_block_name: str = "dev-newsapi-config",
     article_cache_block_name: str = "dev-article-cache",
-    brief_storage_block_name: str = "dev-brief-storage",
+    brief_storage_block_name: str = "dev-brief-storage"
 ):
     """Flow to analyze top articles for comedy potential and store detailed briefs"""
     logger = get_run_logger()

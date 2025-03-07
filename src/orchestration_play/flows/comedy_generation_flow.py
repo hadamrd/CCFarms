@@ -1,3 +1,5 @@
+from orchestration_play.persistence.brief_storage import BriefStorage
+from orchestration_play.persistence.script_storage import ScriptStorage
 from prefect import flow, task, get_run_logger
 from prefect.task_runners import SequentialTaskRunner
 from prefect.blocks.system import Secret
@@ -24,11 +26,11 @@ def get_recent_briefs(brief_storage_block_name: str, limit: int = 5) -> List[Dic
     
     # Initialize brief storage from block
     brief_block = BriefStorageBlock.load(brief_storage_block_name)
-    brief_storage = brief_block.get_brief_storage()
+    brief_storage: BriefStorage = brief_block.get_brief_storage()
     
     # Get most recent briefs
     recent_briefs = brief_storage.get_all_briefs(limit=limit)
-    
+    recent_briefs = [ b['doc']['model_output'] for b in recent_briefs ]
     # Sort by analyzed_at descending to get newest first
     sorted_briefs = sorted(
         recent_briefs, 
@@ -67,7 +69,7 @@ def generate_comedy_script(satirist: Satirist, briefs: List[Dict]) -> Optional[D
 
 
 @task(name="Store Comedy Script")
-def store_comedy_script(script: Dict, script_storage) -> tuple[bool, str|None]:
+def store_comedy_script(script: Dict, script_storage: ScriptStorage) -> tuple[bool, str|None]:
     """Store the generated comedy script in the database"""
     logger = get_run_logger()
     
@@ -76,9 +78,12 @@ def store_comedy_script(script: Dict, script_storage) -> tuple[bool, str|None]:
         return False, None
     
     try:
+        # Extract data from the new script_data format
+        script_data = script["script_data"]
+        
         script_id = script_storage.store_script(
-            title=script["script"].get("title", "Untitled Comedy Script"),
-            script_data=script["script"],
+            title=script_data.get("title", "Untitled Comedy Script"),
+            script_data=script_data,
             source_articles=script["source_articles"],
             generated_at=script["generated_at"],
             article_count=script["article_count"]
@@ -101,27 +106,22 @@ def send_notification(script: Dict, success: bool, webhook_block_name: str) -> N
     
     try:
         # Create a preview of the script for the notification
-        script_data = script["script"]
+        script_data = script["script_data"]
         title = script_data.get("title", "Untitled Comedy Script")
-        opening = script_data.get("opening_monologue", "")
+        description = script_data.get("description", "")
+        body = script_data.get("body", "")
         
-        # Get the first joke from each segment
-        segments_preview = []
-        for idx, segment in enumerate(script_data.get("segments", [])[:3], 1):
-            headline = segment.get("headline", f"Segment {idx}")
-            joke = segment.get("jokes", [])[0] if segment.get("jokes") else "No jokes found"
-            segments_preview.append(f"{idx}. {headline}\n   {joke}")
-        
-        segments_text = "\n".join(segments_preview)
+        # Extract a preview of the body content
+        body_preview = body[:150] + "..." if len(body) > 150 else body
         
         # Create notification message
         message = f"""🎭 **New Comedy Script Generated: {title}**
 
-*Opening Monologue Preview:*
-{opening[:150]}...
+*Description:*
+{description}
 
-*Top Headlines:*
-{segments_text}
+*Preview:*
+{body_preview}
 
 *Generated from {script['article_count']} news articles*
 """
@@ -132,6 +132,7 @@ def send_notification(script: Dict, success: bool, webhook_block_name: str) -> N
         logger.info("Successfully sent script notification")
     except Exception as e:
         logger.error(f"Error sending notification: {str(e)}")
+
 
 @task(name="Create Script Artifact")
 def create_script_artifact(script: Dict, script_id: Optional[str] = None) -> str:
@@ -147,49 +148,27 @@ def create_script_artifact(script: Dict, script_id: Optional[str] = None) -> str
     """
     logger = get_run_logger()
     
-    if not script or not script.get("script"):
+    if not script or not script.get("script_data"):
         logger.warning("No script data available to create artifact")
         return ""
     
     try:
-        script_data = script["script"]
+        script_data = script["script_data"]
         title = script_data.get("title", "Untitled Comedy Script")
+        description = script_data.get("description", "")
+        body = script_data.get("body", "")
         
         # Format the script content as markdown
         markdown_content = f"# {title}\n\n"
+        markdown_content += f"_{description}_\n\n"
         markdown_content += f"_Generated on {script.get('generated_at', datetime.now().isoformat())} from {script.get('article_count', 0)} news articles_\n\n"
         
-        # Add opening monologue
-        markdown_content += "## Opening Monologue\n\n"
-        markdown_content += f"{script_data.get('opening_monologue', 'No opening monologue provided.')}\n\n"
-        
-        # Add segments
-        markdown_content += "## Comedy Segments\n\n"
-        for idx, segment in enumerate(script_data.get("segments", []), 1):
-            markdown_content += f"### {idx}. {segment.get('headline', f'Segment {idx}')}\n\n"
-            
-            # Add jokes
-            jokes = segment.get("jokes", [])
-            if jokes:
-                markdown_content += "**Jokes:**\n\n"
-                for joke_idx, joke in enumerate(jokes, 1):
-                    markdown_content += f"- {joke}\n"
-                markdown_content += "\n"
-            
-            # Add sketch if available
-            sketch = segment.get("sketch")
-            if sketch:
-                markdown_content += "**Sketch Idea:**\n\n"
-                markdown_content += f"{sketch}\n\n"
-        
-        # Add closing remarks
-        if script_data.get("closing_remarks"):
-            markdown_content += "## Closing Remarks\n\n"
-            markdown_content += f"{script_data.get('closing_remarks')}\n\n"
+        # Add the full markdown body as-is
+        markdown_content += body
         
         # Add source information
         if script.get("source_articles"):
-            markdown_content += "## Sources\n\n"
+            markdown_content += "\n\n## Sources\n\n"
             markdown_content += f"Based on {len(script.get('source_articles', []))} news articles\n\n"
         
         # Create the artifact
@@ -213,6 +192,7 @@ def create_script_artifact(script: Dict, script_id: Optional[str] = None) -> str
     except Exception as e:
         logger.error(f"Error creating script artifact: {str(e)}")
         return ""
+
 
 @flow(name="Comedy Script Generation Flow", task_runner=SequentialTaskRunner())
 def comedy_script_flow(

@@ -1,40 +1,31 @@
-I need you to create a comedy script for our satirical news show based on today's analyzed news stories. 
-
-Today is {{ date }}.
-
-Here are the analyzed briefs from our news team:
+You are writing today's comedy script for a satirical news program based on the following analyzed news articles:
 
 {% for brief in briefs %}
-ARTICLE {{ loop.index }}:
-Title: {{ brief.title }}
-URL: {{ brief.url }}
-{% if brief.brief.comedy_potential %}
-Comedy Potential Score: {{ brief.brief.comedy_potential.overall_score }}
-Comedy Reasons: {{ brief.brief.comedy_potential.reasons }}
-{% endif %}
-{% if brief.brief.core_story %}
-Summary: {{ brief.brief.core_story.simple_summary }}
-Key Elements: {{ brief.brief.core_story.key_elements }}
-{% endif %}
-{% if brief.brief.absurdity_analysis %}
-Absurd Elements: {{ brief.brief.absurdity_analysis.absurd_elements }}
-Exaggeration Potential: {{ brief.brief.absurdity_analysis.exaggeration_potential }}
-{% endif %}
-{% if brief.brief.cultural_relevance %}
-References: {{ brief.brief.cultural_relevance.references }}
-Topicality: {{ brief.brief.cultural_relevance.topicality }}
-{% endif %}
-{% if brief.brief.target_analysis %}
-Primary Targets: {{ brief.brief.target_analysis.primary_targets }}
-Target Type: {{ brief.brief.target_analysis.target_type }}
-{% endif %}
+----- ARTICLE {{ loop.index }} -----
+{{ brief | tojson }}
 
 {% endfor %}
 
-Please craft a comedy script for a 10-15 minute segment combining the best material from these stories. Focus on the articles with the highest comedy potential scores and look for unexpected connections between stories.
+Today's date is {{ date }}.
 
-Your response must follow the format described in your instructions, returning properly formatted JSON wrapped in <comedy_script> tags.
+Create a satirical comedy segment that makes fun of these news stories in a witty, clever way. Focus on the most comedically promising stories (higher comedy_potential scores).
 
-I need a witty title, an opening monologue to set the tone, individual comedy segments for the most promising stories, and a brief closing with a final punchline. Each segment should include headline jokes and short sketch ideas where appropriate.
+For the body, create a complete script that includes:
+- An opening monologue to set the tone and introduce key stories
+- Multiple segments with humorous takes on the news stories
+- Closing remarks that wrap up the show with a final punchline
 
-Be creative, irreverent, but tasteful. Good luck!
+Format the body with proper markdown for readability:
+- Use headings (# for title, ## for segments)
+- Consider using *italics* for emphasis or to indicate tone shifts
+- Format jokes with clear setups and punchlines
+- You can use > blockquotes for special segments or "on-screen graphics"
+
+Remember:
+- Be creative and funny while maintaining balanced political perspective
+- Use humor techniques like exaggeration, irony, and unexpected connections
+- Ensure jokes are amusing without being overly cruel
+- Find unexpected connections between different stories when possible
+
+Your response must be valid JSON wrapped in <{{ response_tag }}> tags conforming to this schema:
+{{ response_schema }}

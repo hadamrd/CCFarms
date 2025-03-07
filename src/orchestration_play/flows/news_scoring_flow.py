@@ -10,9 +10,8 @@ from orchestration_play.blocks import NewsAPIBlock, ArticleCacheBlock, TeamsWebh
 from orchestration_play.agents import Digger
 
 
-@task(name="Initialize Digger with Dependencies", 
-      cache_key_fn=task_input_hash,
-      cache_expiration=timedelta(hours=1))
+@task(name="Initialize Digger with Dependencies")
+
 def initialize_digger(
     api_key: str, 
     news_api_block_name: str, 

@@ -2,7 +2,7 @@
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Any, Optional, Dict, List
 import os
 
 class BriefStorage:
@@ -58,7 +58,7 @@ class BriefStorage:
             print(f"Error storing brief: {e}")
             raise
     
-    def get_brief(self, article_id: str) -> Optional[Dict]:
+    def get_brief(self, article_id: str) -> Any:
         """Get a stored brief by article ID"""
         try:
             result = self.collection.find_one({"article_id": article_id})

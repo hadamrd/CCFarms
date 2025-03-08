@@ -5,7 +5,7 @@ class NewsAPIBlock(Block):
     """Secure storage and configuration for NewsAPI integration"""
     _block_type_name = "NewsAPI Configuration"
     _block_type_slug = "newsapi-config"
-    _logo_url = "https://newsapi.org/images/n-logo-border.png"  # Official NewsAPI logo
+    _logo_url = "https://newsapi.org/images/n-logo-border.png"
     _description = "Stores credentials and configuration for NewsAPI integration"
 
     api_key: SecretStr = Field(

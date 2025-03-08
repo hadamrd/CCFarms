@@ -1,12 +1,12 @@
 # src/orchestration_play/flows/news_scoring_flow.py
+from uuid import UUID
+from common.blocks import TeamsWebhook
 from prefect import flow, task, get_run_logger
 from prefect.blocks.system import Secret
 from typing import Dict, List
 from prefect.artifacts import create_markdown_artifact
-from prefect.tasks import task_input_hash
-from datetime import timedelta
 
-from ccfarm.blocks import NewsAPIBlock, ArticleCacheBlock, TeamsWebhook
+from ccfarm.blocks import NewsAPIBlock, ArticleCacheBlock
 from ccfarm.agents import Digger
 
 
@@ -45,14 +45,15 @@ def process_news_articles(digger: Digger, query: str, page_size: int, threshold:
     logger.info(f"Searching for articles with query: '{query}', threshold: {threshold}")
     
     try:
-        return digger.dig_for_news(query=query, page_size=page_size, threshold=threshold)
+        articles: list[dict] = digger.dig_for_news(query=query, page_size=page_size, threshold=threshold)
     except Exception as e:
         logger.error(f"Error processing news articles: {e}")
         raise
+    return articles
 
 
 @task(name="Create Results Artifact")
-def create_results_artifact(articles: List[Dict]) -> str:
+async def create_results_artifact(articles: List[Dict]) -> UUID:
     """Create a markdown artifact with the results"""
     logger = get_run_logger()
     
@@ -76,7 +77,7 @@ def create_results_artifact(articles: List[Dict]) -> str:
             markdown += "---\n\n"
     
     # Create the artifact
-    artifact_id = create_markdown_artifact(
+    artifact_id = await create_markdown_artifact(
         key="news-scoring-results",
         markdown=markdown,
         description="News Articles Scored for Comedy Potential"

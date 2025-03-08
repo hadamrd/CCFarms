@@ -1,6 +1,5 @@
 from datetime import datetime
-from typing import List, Dict, Optional, Any, Union
-from prefect.blocks.core import Block
+from typing import Any, List, Dict, Union
 from pydantic import Field
 from pymongo import MongoClient
 from bson.objectid import ObjectId
@@ -8,6 +7,7 @@ from bson.objectid import ObjectId
 
 class ScriptStorage:
     """Storage handler for comedy scripts"""
+    client: MongoClient
     
     def __init__(self, connection_string: str, database: str, collection: str):
         """
@@ -59,7 +59,7 @@ class ScriptStorage:
         result = self.collection.insert_one(script_document)
         return str(result.inserted_id)
     
-    def get_script(self, script_id: str) -> Optional[Dict]:
+    def get_script(self, script_id: str) -> Any:
         """
         Retrieve a comedy script by ID
         

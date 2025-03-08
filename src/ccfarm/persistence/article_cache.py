@@ -16,10 +16,10 @@ class ArticleCache:
             collection_name: MongoDB collection name
             cache_days: Number of days to keep articles in cache
         """
-        self.connection_string = connection_string or os.environ.get(
-            "MONGODB_URL", 
-            "mongodb://article_user:article_password@mongodb:27017/article_db?authSource=admin"
-        )
+        self.connection_string = connection_string or os.environ.get("MONGODB_URL")
+        if not self.connection_string:
+            raise ValueError("MongoDB connection string required")
+        
         self.db_name = db_name
         self.collection_name = collection_name
         self.cache_days = cache_days

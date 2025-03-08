@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MongoDB storage module for network metrics.
 Simple and focused module for storing and retrieving network metrics.
@@ -13,6 +12,7 @@ class MetricsStorage:
     Storage handler for network telemetry metrics.
     Provides methods to store and retrieve metrics data from MongoDB.
     """
+    client: MongoClient
     
     def __init__(
         self, 

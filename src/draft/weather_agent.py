@@ -5,9 +5,9 @@ import requests
 from typing import Dict, Optional
 from prefect import get_run_logger
 
-from ..orchestration_play.agents.schema_agent import SchemaAgent
+from ..ccfarm.agents.BaseAgent import BaseAgent
 
-class WeatherReporter(SchemaAgent):
+class WeatherReporter(BaseAgent):
     """
     A simple weather reporter agent that generates weather reports
     based on real data from a weather API.

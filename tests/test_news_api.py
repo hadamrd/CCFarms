@@ -1,5 +1,5 @@
 from urllib.parse import urlparse
-from orchestration_play.blocks import NewsAPIBlock
+from ccfarm.blocks import NewsAPIBlock
 
 
 if __name__ == "__main__":

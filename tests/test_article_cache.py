@@ -1,4 +1,4 @@
-from orchestration_play.blocks import ArticleCacheBlock
+from ccfarm.blocks import ArticleCacheBlock
 
 
 if __name__ == "__main__":

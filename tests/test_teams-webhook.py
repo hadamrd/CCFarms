@@ -1,4 +1,4 @@
-from orchestration_play.blocks import TeamsWebhook
+from ccfarm.blocks import TeamsWebhook
 
 
 if __name__ == "__main__":

@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Orchestration flows with Prefect"
 authors = ["Khalid MAJDOUB <khalid.majdoub@sidetrade.com>"]
 packages = [
-    { include = "orchestration_play", from = "src" },
+    { include = "ccfarm", from = "src" },
+    { include = "common", from = "src" },
     { include = "draft", from = "src" },
 ]
 
@@ -29,7 +30,38 @@ mypy = "^1.10.0"
 types-requests = "^2.32.0.20241016"
 types-python-dateutil = "^2.9.0.20241206"
 types-pyyaml = "^6.0.12.20241230"
+types-beautifulsoup4 = "^4.12.0.20250204"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 100
+
+[tool.mypy]
+python = ">=3.10,<3.14"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+disallow_untyped_defs = false
+follow_imports = "silent"
+strict_optional = false
+disable_error_code = ["attr-defined"]
+
+[tool.pyright]
+reportOptionalMemberAccess = false
+reportOptionalCall = false
+reportOptionalIterable = false
+reportOptionalContextManager = false
+reportOptionalOperand = false

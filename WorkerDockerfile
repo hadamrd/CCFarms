@@ -1,9 +1,7 @@
 FROM prefecthq/prefect:2-latest
 
 # Environment variables
-ENV PREFECT_POOL_NAME="default-agent-pool" \
-    PREFECT_QUEUE_NAME="default" \
-    POETRY_NO_INTERACTION=1 \
+ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false
 
 # Install system dependencies

@@ -120,7 +120,7 @@ class WeatherReporter(BaseAgent):
             forecast = weather_data.get("weather", [])
             
             # Use the base agent's process method with the weather_prompt.j2 template
-            report = self.process(
+            report = self.generate_reply(
                 prompt_template="weather_prompt.j2",
                 location=location,
                 current_temp=f"{current.get('temp_C', 'N/A')}°C",

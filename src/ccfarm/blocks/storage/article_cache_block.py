@@ -1,4 +1,4 @@
-from ccfarm.persistence.article_cache import ArticleCache
+from ccfarm.persistence.article_cache import ArticleScoresCache
 from prefect.blocks.core import Block
 from typing import Optional
 
@@ -14,14 +14,14 @@ class ArticleCacheBlock(Block):
     collection_name: str = "article_scores"
     cache_days: int = 7
     
-    def get_article_cache(self) -> ArticleCache:
+    def get_article_cache(self) -> ArticleScoresCache:
         """
         Returns an initialized ArticleCache instance.
         
         Returns:
             ArticleCache: A configured ArticleCache instance
         """
-        return ArticleCache(
+        return ArticleScoresCache(
             connection_string=self.connection_string,
             db_name=self.db_name,
             collection_name=self.collection_name,

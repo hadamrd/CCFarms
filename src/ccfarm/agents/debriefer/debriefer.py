@@ -1,58 +1,51 @@
 import os
-import json
-from typing import Any, List, Dict, Optional
+from typing import Dict, List, Any, Optional, cast
 from prefect import get_run_logger
 from ccfarm.agents.BaseAgent import BaseAgent
 from ccfarm.clients.news_client import NewsAPIClient
+from .models import NewsAnalysis
 
 
 class Debriefer(BaseAgent):
     """
-    AI agent that performs detailed analysis on news articles.
-    Uses the SchemaAgent base class for structured prompting and response validation.
+    AI agent that performs detailed analysis on news articles for comedy potential.
+    Uses the BaseAgent class for structured prompting and response validation.
     """
+    news_client: NewsAPIClient
     
     def __init__(
         self,
         anthropic_api_key: str,
-        news_client: Optional[NewsAPIClient] = None,
-        model: str = "claude-3-5-sonnet-20241022",
-        schema_file: Optional[str] = None
+        news_client: NewsAPIClient,
     ):
         """
         Initialize the Debriefer agent with required dependencies.
         
         Args:
             anthropic_api_key: API key for Anthropic
-            news_client: Optional NewsAPI client (can be injected later)
-            model: Anthropic model to use
-            schema_file: Path to JSON schema file (optional)
+            news_client: NewsAPI client
         """
         # Set up the directory for this agent
         self.agent_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # Load schema from file or use default
-        schema_path = schema_file or os.path.join(
-            self.agent_dir,
-            "debriefer_schema.json"
-        )
+        # Configure LLM settings for AutoGen
+        llm_config = {
+            "config_list": [
+                {
+                    "model": "claude-3-5-sonnet-20241022",
+                    "api_key": anthropic_api_key,
+                    "api_base": "https://api.anthropic.com/v1/messages",
+                    "api_type": "anthropic",
+                }
+            ],
+            "temperature": 0.3,  # More factual assessments
+        }
         
-        # Load schema from file
-        if os.path.exists(schema_path):
-            with open(schema_path, 'r') as f:
-                response_schema = json.load(f)
-        else:
-            raise ValueError("Schema file not found: " + schema_path)
-        
-        # Initialize base agent with JSON schema
+        # Initialize base agent
         super().__init__(
             name="NewsDebriefer",
-            response_schema=response_schema,
-            anthropic_api_key=anthropic_api_key,
-            model=model,
+            llm_config=llm_config,
             template_dir=self.agent_dir,
-            response_tag="brief_json",
-            temperature=0.3
         )
         
         self.logger = get_run_logger()
@@ -98,8 +91,9 @@ class Debriefer(BaseAgent):
                 try:
                     analysis_result = self.analyze_article(article)
                     # Add the URL to the result
-                    analysis_result['url'] = url
-                    processed.append(analysis_result)
+                    analysis_result_dict = analysis_result.dict()
+                    analysis_result_dict['url'] = url
+                    processed.append(analysis_result_dict)
                     self.logger.info(f"Successfully analyzed article: {article.get('title')}")
                 except Exception as e:
                     self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
@@ -109,24 +103,28 @@ class Debriefer(BaseAgent):
                 
         return processed
     
-    def analyze_article(self, article: Dict) -> Any:
+    def analyze_article(self, article: Dict) -> NewsAnalysis:
         """
-        Analyze a single article using SchemaAgent processing.
+        Analyze a single article using BaseAgent processing.
         
         Args:
             article: Article dictionary with title and content
             
         Returns:
-            Dictionary with analysis results conforming to schema
+            NewsAnalysis with comedic evaluation results conforming to schema
         """
         try:
             self.logger.info(f"Analyzing article: {article.get('title')}")
             
             # Use the base agent's process method with the analyze_prompt.j2 template
-            return self.process(
+            analysis = cast(NewsAnalysis, self.generate_reply(
                 prompt_template="analyze_prompt.j2",
+                response_tag="brief_json",
+                response_model=NewsAnalysis,
                 article=article
-            )
+            ))
+            
+            return analysis
             
         except Exception as e:
             self.logger.error(f"Error analyzing article: {article.get('title', 'Unknown')}: {e}")
@@ -152,36 +150,20 @@ class Debriefer(BaseAgent):
             if not content:
                 raise ValueError(f"Could not fetch content for URL: {url}")
                 
-            # Create a minimal article object
+            # Create an article object with the URL and content
             article = {
                 'url': url,
-                'title': self._extract_title_from_content(content),
                 'content': content
             }
             
             # Analyze it
-            analysis_result: Dict = self.analyze_article(article)
-            # Add URL to result
-            analysis_result['url'] = url
-            return analysis_result
+            analysis_result = self.analyze_article(article)
+            
+            # Convert to dict and add URL
+            result_dict = analysis_result.dict()
+            result_dict['url'] = url
+            return result_dict
             
         except Exception as e:
             self.logger.error(f"Error analyzing URL {url}: {str(e)}")
             raise
-    
-    def _extract_title_from_content(self, content: str) -> str:
-        """
-        Extract title from HTML content if possible.
-        This is a simple fallback when title isn't provided.
-        
-        Args:
-            content: HTML content of the article
-            
-        Returns:
-            Extracted title or placeholder
-        """
-        import re
-        title_match = re.search(r'<title>(.*?)</title>', content, re.IGNORECASE)
-        if title_match:
-            return title_match.group(1)
-        return "Unknown Title"

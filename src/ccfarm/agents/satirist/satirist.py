@@ -75,7 +75,7 @@ class Satirist(BaseAgent):
             current_date = datetime.now().strftime("%A, %B %d, %Y")
             
             # Use the base SchemaAgent's process method with the prompt.j2 template
-            script_data = self.process(
+            script_data = self.generate_reply(
                 prompt_template="prompt.j2",
                 briefs=analyzed_articles,
                 date=current_date

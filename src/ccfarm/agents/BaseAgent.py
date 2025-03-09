@@ -1,210 +1,170 @@
-# src/orchestration_play/agents/schema_agent.py
-from autogen import AssistantAgent
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from __future__ import annotations
+
 import json
 import os
 import re
-from typing import Dict, Optional, Any
-import jsonschema
-from prefect import get_run_logger
 import inspect
-from jsonschema.exceptions import ValidationError
+from typing import Dict, Optional, Any, Type
+
+from autogen import AssistantAgent
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import BaseModel
+from prefect import get_run_logger
+from tenacity import retry, stop_after_attempt, wait_random_exponential
+
+
+class ResponseParsingError(Exception):
+    pass
+
+
+class ValidationError(Exception):
+    pass
+
+
+class LLMInteractionError(Exception):
+    pass
+
 
 class BaseAgent:
-    """
-    Base agent class that combines autogen's AssistantAgent with JSON Schema validation
-    and templating capabilities.
-    """
-    
     def __init__(
         self,
         name: str,
-        response_schema: dict[str, Any],
-        anthropic_api_key: str,
-        model: str = "claude-3-5-sonnet-20241022",
+        llm_config: dict,
         template_dir: Optional[str] = None,
-        system_message_template: str = "system_message.j2",
-        temperature: float = 0.3,
-        response_tag: str = "response_json",
+        system_message_kwargs: Optional[Dict[str, Any]] = None,
         max_retries: int = 3,
     ):
-        """
-        Initialize the schema-based agent.
-        
-        Args:
-            name: Name of the agent
-            response_schema: JSON Schema that defines the expected response format
-            anthropic_api_key: API key for Anthropic
-            model: Model name to use
-            template_dir: Directory containing templates (defaults to agent's directory)
-            system_message_template: Filename of the system message template
-            temperature: Model temperature
-            response_tag: Tag to wrap the JSON response in
-            max_retries: Maximum number of retries for API calls
-        """
         self.logger = get_run_logger()
-        self.response_schema = response_schema
-        self.response_tag = response_tag
+        self.name = name
         self.max_retries = max_retries
-        
-        # Set up template environment
+
         if template_dir is None:
-            # Default to the directory where the child class is defined
             template_dir = os.path.dirname(inspect.getfile(self.__class__))
-        
+
+        self._setup_template_environment(template_dir)
+        system_message = self._generate_system_message(system_message_kwargs or {})
+
+        self.agent = AssistantAgent(name=name, llm_config=llm_config, system_message=system_message)
+
+    def _setup_template_environment(self, template_dir: str) -> None:
+        self.logger.info(f"Setting up template environment in '{template_dir}'")
+
+        if not os.path.isdir(template_dir):
+            raise FileNotFoundError(f"Template directory not found: {template_dir}")
+
         self.template_env = Environment(
             loader=FileSystemLoader(template_dir),
             autoescape=select_autoescape(["html", "xml"]),
             trim_blocks=True,
-            lstrip_blocks=True
+            lstrip_blocks=True,
         )
-        
-        # Generate system message from template
-        system_message = self._render_template(
-            system_message_template,
-            response_tag=response_tag,
-            response_schema=json.dumps(response_schema, indent=2)
-        )
-        
-        # Initialize the underlying AssistantAgent
-        self.agent = AssistantAgent(
-            name=name,
-            llm_config={
-                "config_list": [{
-                    "model": model,
-                    "api_key": anthropic_api_key,
-                    "api_base": "https://api.anthropic.com/v1/messages",
-                    "api_type": "anthropic",
-                }],
-                "temperature": temperature,
-                "timeout": 30,
-            },
-            system_message=system_message
-        )
-    
+
+        template_path = os.path.join(template_dir, "system_message.j2")
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(
+                f"Required template 'system_message.j2' not found at {template_path}"
+            )
+
+    def _generate_system_message(self, kwargs: Dict[str, Any]) -> str:
+        self.logger.info("Generating system message")
+        return self._render_template("system_message.j2", **kwargs)
+
     def _render_template(self, template_name: str, **kwargs) -> str:
-        """
-        Render a template with the given arguments.
-        
-        Args:
-            template_name: Name of the template file
-            **kwargs: Arguments to pass to the template
-            
-        Returns:
-            Rendered template string
-        """
         try:
             template = self.template_env.get_template(template_name)
             return template.render(**kwargs)
         except Exception as e:
-            self.logger.error(f"Error rendering template {template_name}: {str(e)}")
-            raise
-    
-    def _extract_tagged_json(self, content: str) -> Dict:
-        """
-        Extract JSON from between response tags in the LLM response.
-        
-        Args:
-            content: Raw response from LLM
-            
-        Returns:
-            Parsed JSON dictionary
-        """
-        pattern = f'<{self.response_tag}>(.*?)</{self.response_tag}>'
+            self.logger.error(f"Error rendering template '{template_name}': {str(e)}")
+            raise RuntimeError(f"Template rendering failed: {str(e)}") from e
+
+    def _extract_tagged_json(self, content: str, tag_name: str) -> Dict[str, Any]:
+        pattern = f"<{tag_name}>(.*?)</{tag_name}>"
         match = re.search(pattern, content, re.DOTALL)
-        
+
         if not match:
-            self.logger.error(f"No {self.response_tag} tags found in response")
-            error_msg = f"Response does not contain proper {self.response_tag} tags. Full response: {content[:500]}..."
-            raise ValueError(error_msg)
-            
+            error_msg = f"Response does not contain <{tag_name}> tags"
+            self.logger.error(error_msg)
+            truncated_content = content[:500] + "..." if len(content) > 500 else content
+            raise ResponseParsingError(f"{error_msg}. Content: {truncated_content}")
+
         json_str = match.group(1).strip()
-        
+
         try:
-            result: dict = json.loads(json_str)
+            result = json.loads(json_str)
+            if not isinstance(result, dict):
+                raise ResponseParsingError(f"Parsed JSON is not a dictionary: {type(result)}")
             return result
         except json.JSONDecodeError as e:
-            self.logger.error(f"Invalid JSON in response: {json_str[:500]}...")
-            raise ValueError(f"Invalid JSON in response: {str(e)}")
-    
-    def _validate_against_schema(self, data: Dict) -> None:
-        """
-        Validate data against the JSON schema.
-        
-        Args:
-            data: Data to validate
-            
-        Raises:
-            jsonschema.exceptions.ValidationError: If validation fails
-        """
-        try:
-            jsonschema.validate(instance=data, schema=self.response_schema)
-        except ValidationError as e:
-            self.logger.error(f"Schema validation failed: {str(e)}")
-            raise
-    
-    # @retry(
-    #     stop=stop_after_attempt(3),
-    #     wait=wait_random_exponential(
-    #         multiplier=1,
-    #         max=60
-    #     )
-    # )
-    def process(self, prompt_template: str, **kwargs) -> Dict:
-        """
-        Process a prompt and return the validated response.
-        
-        Args:
-            prompt_template: Name of the prompt template file
-            **kwargs: Arguments to pass to the prompt template
-            
-        Returns:
-            Validated dictionary response
-        """
-        # Add schema to kwargs
-        kwargs['response_schema'] = json.dumps(self.response_schema, indent=2)
-        kwargs['response_tag'] = self.response_tag
-            
-        # Render prompt
+            truncated_json = json_str[:300] + "..." if len(json_str) > 300 else json_str
+            error_msg = f"Invalid JSON in <{tag_name}> tags: {str(e)}\nContent: {truncated_json}"
+            self.logger.error(error_msg)
+            raise ResponseParsingError(error_msg) from e
+
+    def _format_schema_instructions(self, model: Type[BaseModel], tag: str) -> str:
+        schema = model.schema()
+        return f"""
+Return your response in <{tag}> format with valid JSON that conforms to this schema:
+```json
+{json.dumps(schema, indent=2)}
+```
+
+Make sure all required fields are included and properly formatted. 
+The response must be valid JSON enclosed in <{tag}> tags.
+"""
+
+    @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=60))
+    def _call_llm_with_retry(self, prompt: str) -> Dict[str, Any]:
+        self.logger.info("Making LLM call")
+        response = self.agent.generate_reply([{"content": prompt, "role": "user"}])
+
+        if response is None:
+            raise LLMInteractionError("LLM returned None response")
+
+        if not isinstance(response, dict):
+            raise LLMInteractionError(f"Expected dict response, got {type(response)}")
+
+        content = response.get("content")
+        if content is None or not isinstance(content, str):
+            raise LLMInteractionError("Response is missing content or content is not a string")
+
+        return response
+
+    def generate_reply(
+        self,
+        prompt_template: str,
+        response_tag: str,
+        response_model: Type[BaseModel],
+        auto_append_instructions: bool = True,
+        **kwargs,
+    ) -> BaseModel:
         prompt = self._render_template(prompt_template, **kwargs)
-        
+        self.logger.info(prompt)
+
+        return self.generate_reply_with_raw_prompt(
+            prompt=prompt,
+            response_tag=response_tag,
+            response_model=response_model,
+            auto_append_instructions=auto_append_instructions,
+        )
+
+    def generate_reply_with_raw_prompt(
+        self,
+        prompt: str,
+        response_tag: str,
+        response_model: Type[BaseModel],
+        auto_append_instructions: bool = True,
+    ) -> BaseModel:
+        if auto_append_instructions:
+            schema_instructions = self._format_schema_instructions(response_model, response_tag)
+            prompt = f"{prompt.rstrip()}\n\n{schema_instructions}"
+
         try:
-            self.logger.info(f"Sending prompt to LLM")
-            response = self.agent.generate_reply([{"content": prompt, "role": "user"}])
-            
-            if response is None or not isinstance(response, dict):
-                raise ValueError("Invalid response from LLM")
-            
-            content: str = response.get("content", None)
-            if content is None or not isinstance(content, str):
-                raise ValueError("LLM response is missing content, or content is not a string")
-                
-            # Parse response
-            json_data = self._extract_tagged_json(content)
-            
-            # Validate against schema
-            self._validate_against_schema(json_data)
-            
-            return json_data
-            
-        except Exception as e:
-            self.logger.error(f"Error in process method: {str(e)}")
+            response = self._call_llm_with_retry(prompt)
+            content = response["content"]
+            json_data = self._extract_tagged_json(content, response_tag)
+            return response_model.parse_obj(json_data)
+        except (ResponseParsingError, ValidationError, LLMInteractionError) as e:
             raise
-    
-    def load_schema_from_file(self, schema_file: str) -> Dict:
-        """
-        Load a JSON schema from a file.
-        
-        Args:
-            schema_file: Path to the schema file
-            
-        Returns:
-            Loaded schema dictionary
-        """
-        try:
-            with open(schema_file, 'r') as f:
-                schema: Dict = json.load(f)
-            return schema
         except Exception as e:
-            self.logger.error(f"Error loading schema from {schema_file}: {str(e)}")
-            raise
+            self.logger.error(f"Unexpected error in generate_reply: {str(e)}")
+            raise RuntimeError(f"Failed to generate reply: {str(e)}") from e

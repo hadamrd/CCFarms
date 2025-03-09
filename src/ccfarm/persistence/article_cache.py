@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 import os
 
-class ArticleCache:
+class ArticleScoresCache:
     def __init__(self, connection_string=None, db_name="article_db", collection_name="article_scores", cache_days=7):
         """
         Initialize article cache with MongoDB backend

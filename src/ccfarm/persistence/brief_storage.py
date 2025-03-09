@@ -5,12 +5,11 @@ from datetime import datetime
 from typing import Any, Optional, Dict, List
 import os
 
-class BriefStorage:
+class BriefStore:
     def __init__(self, connection_string=None, db_name="article_db", collection_name="article_briefs"):
-        self.connection_string = connection_string or os.environ.get(
-            "MONGODB_URL", 
-            "mongodb://article_user:article_password@mongodb:27017/article_db?authSource=admin"
-        )
+        self.connection_string = connection_string or os.environ.get("MONGODB_URL")
+        if not self.connection_string:
+            raise ValueError("MongoDB connection string required")
         self.db_name = db_name
         self.collection_name = collection_name
         self.client = None

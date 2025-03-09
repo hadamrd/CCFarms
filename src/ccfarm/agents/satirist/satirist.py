@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Optional
 from datetime import datetime
 from prefect import get_run_logger
-from ccfarm.agents.BaseAgent import BaseAgent
+from ccfarm.agents.base_agent import BaseAgent
 
 
 class Satirist(BaseAgent):

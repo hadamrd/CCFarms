@@ -1,4 +1,4 @@
-from ccfarm.persistence.brief_storage import BriefStorage
+from ccfarm.persistence.brief_storage import BriefStore
 from ccfarm.persistence.script_storage import ScriptStorage
 from prefect import flow, task, get_run_logger
 from prefect.task_runners import SequentialTaskRunner
@@ -26,7 +26,7 @@ def get_recent_briefs(brief_storage_block_name: str, limit: int = 5) -> List[Dic
     
     # Initialize brief storage from block
     brief_block = BriefStorageBlock.load(brief_storage_block_name)
-    brief_storage: BriefStorage = brief_block.get_brief_storage()
+    brief_storage: BriefStore = brief_block.get_brief_storage()
     
     # Get most recent briefs
     recent_briefs = brief_storage.get_all_briefs(limit=limit)

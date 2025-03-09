@@ -1,4 +1,4 @@
-from typing import List, Optional, Annotated
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 class ComedyAngle(BaseModel):
@@ -6,7 +6,7 @@ class ComedyAngle(BaseModel):
     approach: str = Field(..., description="A specific comedic approach or angle to take with the news story")
     sample_line: str = Field(..., description="An example joke or line using this comedic approach")
 
-class NewsAnalysis(BaseModel):
+class ArticleAnalysis(BaseModel):
     """Pydantic model for the complete news analysis with comedy potential evaluation"""
     title: str = Field(..., description="Original title of the news article")
     
@@ -29,8 +29,10 @@ class NewsAnalysis(BaseModel):
         description="Up to 5 key factual points from the article that could be used in comedy"
     )
     
-    comedy_potential: Annotated[int, Field(ge=1, le=10)] = Field(
+    comedy_potential: int = Field(
         ..., 
+        ge=1,
+        le=10,
         description="Rating from 1-10 of how much comedy potential this news story has"
     )
     

@@ -1,12 +1,14 @@
 import os
 from typing import List, Dict, cast
+from ccfarm.agents.base_agent import BaseAgent
 from ccfarm.agents.digger.models import ArticleScore
 from ccfarm.clients.news_client import NewsAPIClient
-from ccfarm.persistence.article_cache import ArticleScoresCache
 from prefect import get_run_logger
 
-from ccfarm.agents import BaseAgent
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ccfarm.persistence.scores_storage import ArticleScoresStore
 class Digger(BaseAgent):
     """
     AI agent that evaluates news articles for comedy potential on a scale of 1-10.
@@ -17,7 +19,7 @@ class Digger(BaseAgent):
         self, 
         anthropic_api_key: str, 
         news_client: NewsAPIClient, 
-        scores_cache: ArticleScoresCache
+        scores_store: "ArticleScoresStore"
     ):
         # Set up the directory for this agent
         self.agent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -44,7 +46,7 @@ class Digger(BaseAgent):
         
         self.logger = get_run_logger()
         self.news_client = news_client
-        self.cache = scores_cache
+        self.cache = scores_store
     
     def set_news_client(self, news_client):
         """Set the NewsAPI client after initialization"""
@@ -54,7 +56,7 @@ class Digger(BaseAgent):
         """Set the ArticleCache after initialization"""
         self.cache = article_cache
 
-    def quick_score_articles(self, articles: List[Dict], threshold: int = 7) -> List[Dict]:
+    def quick_score_articles(self, articles: List[Dict]) -> List[Dict]:
         """
         Quickly score articles based on title/description, returning those above threshold.
         """
@@ -65,10 +67,6 @@ class Digger(BaseAgent):
         scored_articles = []
         
         for article in articles:
-            if isinstance(article, str):
-                self.logger.error(f"Invalid article format: {article}")
-                raise ValueError("Article must be a dictionary, got string instead: " + article)
-                
             if not article.get('title') or not article.get('description'):
                 self.logger.warning("Skipping article with missing title or description")
                 continue
@@ -80,40 +78,33 @@ class Digger(BaseAgent):
 
             # Check cache first
             self.logger.info(f"Checking cache for article: {article['title']}")
-            cached = self.cache.get_cached_score(url)
+            article_score = self.cache.get_score(url)
             
-            if cached:
-                self.logger.info(f"Found cached article: {cached['title']} with score {cached['score']}")
-                if cached['score'] >= threshold:
-                    scored_articles.append({
-                        'title': cached['title'],
-                        'score': cached['score'],
-                        'reason': cached['reason'],
-                        'original_article': article
-                    })
+            if article_score:
+                self.logger.info(f"Found cached score of value {article_score.dict()}")
+                scored_articles.append({
+                    'score': article_score,
+                    'article': article
+                })
                 continue
 
             # Score new articles
             self.logger.info(f"Scoring new article: {article['title']}")
-            score_result = self._get_quick_score(article)
+            article_score = self._get_quick_score(article)
             
-            self.logger.info(f"Article scored: {article['title']} - Score: {score_result.score}")
-            self.cache.cache_score(
+            self.logger.info(f"Article scored: {article['title']} - Score: {article_score.score}")
+            self.cache.save_score(
                 url=url,
                 title=article['title'],
-                score=score_result.score,
-                reason=score_result.reason
+                score_result=article_score
             )
 
-            if score_result.score >= threshold:
-                scored_articles.append({
-                    'title': article['title'],
-                    'score': score_result.score,
-                    'reason': score_result.reason,
-                    'original_article': article
-                })
+            scored_articles.append({
+                'score': article_score,
+                'article': article
+            })
 
-        return sorted(scored_articles, key=lambda x: x['score'], reverse=True)
+        return sorted(scored_articles, key=lambda x: x['score'].score, reverse=True)
 
     def _get_quick_score(self, article: Dict) -> ArticleScore:
         """
@@ -133,7 +124,7 @@ class Digger(BaseAgent):
             self.logger.error(f"Error scoring article: {article.get('title', 'Unknown')}: {e}")
             return ArticleScore(score=0, reason=f"Error in scoring: {str(e)}")
 
-    def dig_for_news(self, query: str = "artificial intelligence", page_size: int = 20, threshold: int = 6) -> List[Dict]:
+    def dig_for_news(self, query: str = "artificial intelligence", page_size: int = 20, days_in_past: int = 7) -> List[Dict]:
         """
         Main method to fetch and score news articles.
         """
@@ -149,7 +140,7 @@ class Digger(BaseAgent):
         self.logger.info(f"Fetching articles for query: {query}, page_size: {page_size}")
         # Get articles from news client with time constraint
         from datetime import datetime, timedelta
-        last_week = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        last_week = (datetime.now() - timedelta(days=days_in_past)).strftime('%Y-%m-%d')
         
         response = self.news_client.get_everything(
             query=query,
@@ -160,17 +151,15 @@ class Digger(BaseAgent):
         
         articles = response.get('articles', [])
         if not articles:
-            self.logger.error("No articles found for query")
-            raise Exception("No articles found!")
+            raise RuntimeError("No articles found!")
 
-        # Get quick scores and shortlist
-        self.logger.info(f"Scoring {len(articles)} articles with threshold {threshold}")
-        shortlisted = self.quick_score_articles(articles, threshold=threshold)
-        self.logger.info(f"Found {len(shortlisted)} articles above threshold")
+        # Get quick scores for articles
+        self.logger.info(f"Scoring {len(articles)} articles")
+        scored_articles = self.quick_score_articles(articles)
 
         # Clean up expired cache entries
         self.logger.info("Cleaning up expired cache entries")
         cleanup_count = self.cache.cleanup_expired()
         self.logger.info(f"Removed {cleanup_count} expired entries from cache")
         
-        return shortlisted
+        return scored_articles

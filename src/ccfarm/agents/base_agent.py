@@ -138,8 +138,6 @@ The response must be valid JSON enclosed in <{tag}> tags.
         **kwargs,
     ) -> BaseModel:
         prompt = self._render_template(prompt_template, **kwargs)
-        self.logger.info(prompt)
-
         return self.generate_reply_with_raw_prompt(
             prompt=prompt,
             response_tag=response_tag,

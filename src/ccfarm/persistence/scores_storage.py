@@ -1,21 +1,13 @@
 # src/orchestration_play/persistence/article_cache.py
+from ccfarm.agents.digger.models import ArticleScore
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List
+from typing import Dict, List
 import os
 
-class ArticleScoresCache:
-    def __init__(self, connection_string=None, db_name="article_db", collection_name="article_scores", cache_days=7):
-        """
-        Initialize article cache with MongoDB backend
-        
-        Args:
-            connection_string: MongoDB connection string
-            db_name: MongoDB database name
-            collection_name: MongoDB collection name
-            cache_days: Number of days to keep articles in cache
-        """
+class ArticleScoresStore:
+    def __init__(self, connection_string, db_name="article_db", collection_name="article_scores", cache_days=7):
         self.connection_string = connection_string or os.environ.get("MONGODB_URL")
         if not self.connection_string:
             raise ValueError("MongoDB connection string required")
@@ -47,13 +39,7 @@ class ArticleScoresCache:
             print(f"Error initializing MongoDB: {e}")
             raise
     
-    def get_cached_score(self, url: str) -> Optional[Dict]:
-        """
-        Get cached score for article if it exists and is not expired
-        
-        Returns:
-            Dict with score info or None if not found/expired
-        """
+    def get_score(self, url: str) -> ArticleScore|None:
         try:
             cutoff_date = datetime.now() - timedelta(days=self.cache_days)
             
@@ -62,31 +48,30 @@ class ArticleScoresCache:
                 "cached_at": {"$gt": cutoff_date}
             })
             
-            if result:
-                # Convert MongoDB _id to string for serialization
-                result["_id"] = str(result["_id"])
-                return result
-                
-            return None
+            if not result:
+                return None
+            
+            return ArticleScore.parse_obj(result['score_result'])
             
         except PyMongoError as e:
             print(f"Error retrieving cached score: {e}")
             return None
     
-    def cache_score(self, url: str, title: str, score: int, reason: str):
+    def save_score(self, url: str, title: str, score_result: ArticleScore):
         """Cache a new article score"""
         try:
             current_time = datetime.now()
             
+            doc = {
+                "url": url,
+                "title": title,
+                "cached_at": current_time,
+                "score_result": score_result.dict(),
+            }
+            
             self.collection.update_one(
                 {"url": url},
-                {"$set": {
-                    "url": url,
-                    "title": title,
-                    "score": score,
-                    "reason": reason,
-                    "cached_at": current_time
-                }},
+                {"$set": doc},
                 upsert=True
             )
             
@@ -94,14 +79,14 @@ class ArticleScoresCache:
             print(f"Error caching score: {e}")
             raise
     
-    def get_all_cached(self) -> List[Dict]:
+    def list_scores(self, sort_field: str = "score_result.score", limit: int = 50) -> List[Dict]:
         """Get all non-expired cached articles"""
         try:
             cutoff_date = datetime.now() - timedelta(days=self.cache_days)
             
-            results = self.collection.find(
-                {"cached_at": {"$gt": cutoff_date}}
-            ).sort("score", -1)  # Sort by score descending
+            query = {"cached_at": {"$gt": cutoff_date}}
+            
+            results = self.collection.find(query).sort(sort_field, -1).limit(limit)
             
             # Convert MongoDB _id to string for serialization
             return [{**doc, "_id": str(doc["_id"])} for doc in results]

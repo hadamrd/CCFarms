@@ -5,7 +5,7 @@ import requests
 from typing import Dict, Optional
 from prefect import get_run_logger
 
-from ..ccfarm.agents.BaseAgent import BaseAgent
+from ..ccfarm.agents.base_agent import BaseAgent
 
 class WeatherReporter(BaseAgent):
     """

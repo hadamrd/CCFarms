@@ -1,5 +1,5 @@
 # src/orchestration_play/blocks/brief_storage_block.py
-from ccfarm.persistence.brief_storage import BriefStorage
+from ccfarm.persistence.brief_storage import BriefStore
 from prefect.blocks.core import Block
 from typing import Optional
 
@@ -14,14 +14,14 @@ class BriefStorageBlock(Block):
     db_name: str = "article_db"
     collection_name: str = "article_briefs"
     
-    def get_brief_storage(self) -> BriefStorage:
+    def get_brief_storage(self) -> BriefStore:
         """
         Returns an initialized BriefStorage instance.
         
         Returns:
             BriefStorage: A configured BriefStorage instance
         """
-        return BriefStorage(
+        return BriefStore(
             connection_string=self.connection_string,
             db_name=self.db_name,
             collection_name=self.collection_name

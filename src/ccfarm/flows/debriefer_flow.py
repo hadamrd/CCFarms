@@ -2,7 +2,7 @@
 Article analysis and brief generation orchestration flow.
 """
 
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from prefect import flow, get_run_logger, task
 from prefect.blocks.system import Secret
 from prefect.task_runners import SequentialTaskRunner
@@ -20,7 +20,7 @@ def get_top_articles(
     brief_storage: BriefStore,
     limit: int = 5,
     reanalyze_existing: bool = False,
-) -> List[Dict]:
+) -> Any:
     """Retrieve top articles from cache, filtering already briefed ones unless reanalysis requested"""
     logger = get_run_logger()
     logger.info(f"Retrieving top articles (limit: {limit}, reanalyze: {reanalyze_existing})")

@@ -3,8 +3,13 @@ from ccfarm.blocks import NewsAPIBlock
 
 
 if __name__ == "__main__":
-    block: NewsAPIBlock = NewsAPIBlock.load("dev-newsapi-config")
-    client = block.get_client()
+    api_key = Secret.load("news-api-key")
+    client = NewsAPIClient(
+            api_key=self.api_key.get_secret_value(),
+            rate_limit=self.rate_limit,
+            skip_domains=self.skip_domains
+        )
+
     articles = client.get_everything(
         query="artificial intelligence",
         page_size=10,  # Get more since we'll skip some

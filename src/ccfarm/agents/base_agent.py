@@ -110,6 +110,16 @@ Return your response in <{tag}> format with valid JSON that conforms to this sch
 
 Make sure all required fields are included and properly formatted. 
 The response must be valid JSON enclosed in <{tag}> tags.
+IMPORTANT JSON FORMATTING REQUIREMENTS:
+
+All apostrophes (') in string values must be properly escaped as \'
+All quotes (") within string values must be properly escaped as \"
+Avoid unescaped control characters in strings
+Ensure all string values use double quotes for JSON compliance
+
+Example of proper escaping in JSON:
+"description": "This is a user's guide with "quoted text" inside"
+Improper escaping causes parsing failures. Please validate your JSON structure before returning.
 """
 
     @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=60))
@@ -155,9 +165,12 @@ The response must be valid JSON enclosed in <{tag}> tags.
         if auto_append_instructions:
             schema_instructions = self._format_schema_instructions(response_model, response_tag)
             prompt = f"{prompt.rstrip()}\n\n{schema_instructions}"
+        
+        self.logger.info(f"Generating reply with prompt: {prompt}")
 
         try:
             response = self._call_llm_with_retry(prompt)
+            self.logger.info("LLM call successful: {}".format(response))
             content = response["content"]
             json_data = self._extract_tagged_json(content, response_tag)
             return response_model.parse_obj(json_data)
@@ -166,3 +179,4 @@ The response must be valid JSON enclosed in <{tag}> tags.
         except Exception as e:
             self.logger.error(f"Unexpected error in generate_reply: {str(e)}")
             raise RuntimeError(f"Failed to generate reply: {str(e)}") from e
+

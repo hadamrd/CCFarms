@@ -1,4 +1,19 @@
-You are writing today's comedy script for a satirical news program based on the following analyzed news articles:
+Review the following news articles carefully and create a comedy script that can be turned into voice segments for a video.
+
+Your script should:
+- Capture the most important and interesting information from the articles
+- Present the content in an entertaining and engaging way
+- Use a conversational tone that works well for spoken delivery
+- Include appropriate humor that enhances rather than distracts from the information
+- Structure the information logically with natural transitions between topics
+- Be concise while covering the essential points
+
+The script should feel like a professional but entertaining news commentary that viewers would enjoy listening to while watching related screenshots.
+
+Create a complete script with:
+1. A catchy title
+2. A brief description of the overall segment
+3. Speech segments that include the spoken text along with appropriate tone markers
 
 {% for brief in briefs %}
 ----- ARTICLE {{ loop.index }} -----
@@ -7,25 +22,3 @@ You are writing today's comedy script for a satirical news program based on the 
 {% endfor %}
 
 Today's date is {{ date }}.
-
-Create a satirical comedy segment that makes fun of these news stories in a witty, clever way. Focus on the most comedically promising stories (higher comedy_potential scores).
-
-For the body, create a complete script that includes:
-- An opening monologue to set the tone and introduce key stories
-- Multiple segments with humorous takes on the news stories
-- Closing remarks that wrap up the show with a final punchline
-
-Format the body with proper markdown for readability:
-- Use headings (# for title, ## for segments)
-- Consider using *italics* for emphasis or to indicate tone shifts
-- Format jokes with clear setups and punchlines
-- You can use > blockquotes for special segments or "on-screen graphics"
-
-Remember:
-- Be creative and funny while maintaining balanced political perspective
-- Use humor techniques like exaggeration, irony, and unexpected connections
-- Ensure jokes are amusing without being overly cruel
-- Find unexpected connections between different stories when possible
-
-Your response must be valid JSON wrapped in <{{ response_tag }}> tags conforming to this schema:
-{{ response_schema }}

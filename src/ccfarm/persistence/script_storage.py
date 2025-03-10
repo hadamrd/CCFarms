@@ -1,26 +1,43 @@
 from datetime import datetime
-from typing import Any, List, Dict, Union
-from pydantic import Field
+from typing import Any, Dict, List, Union
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from bson.objectid import ObjectId
-
+import os
 
 class ScriptStorage:
     """Storage handler for comedy scripts"""
-    client: MongoClient
     
-    def __init__(self, connection_string: str, database: str, collection: str):
-        """
-        Initialize script storage with MongoDB connection details
+    def __init__(self, connection_string, db_name="article_db", collection_name="comedy_scripts"):
+        self.connection_string = connection_string
+        if not self.connection_string:
+            raise ValueError("MongoDB connection string required")
         
-        Args:
-            connection_string: MongoDB connection string
-            database: Database name
-            collection: Collection name for scripts
-        """
-        self.client = MongoClient(connection_string)
-        self.db = self.client[database]
-        self.collection = self.db[collection]
+        self.db_name = db_name
+        self.collection_name = collection_name
+        self.client = None
+        self.db = None
+        self.collection = None
+        self._init_db()
+    
+    def _init_db(self):
+        """Initialize database connection and create indexes"""
+        try:
+            self.client = MongoClient(self.connection_string)
+            self.db = self.client[self.db_name]
+            self.collection = self.db[self.collection_name]
+            
+            # Create index on created_at for efficient sorting
+            if "created_at_1" not in self.collection.index_information():
+                self.collection.create_index("created_at")
+                
+            # Create index on source_articles for efficient querying
+            if "source_articles_1" not in self.collection.index_information():
+                self.collection.create_index("source_articles")
+                
+        except PyMongoError as e:
+            print(f"Error initializing MongoDB: {e}")
+            raise
     
     def store_script(
         self,
@@ -30,85 +47,70 @@ class ScriptStorage:
         generated_at: Union[datetime, str],
         article_count: int
     ) -> str:
-        """
-        Store a new comedy script in the database
-        
-        Args:
-            title: Title of the comedy script
-            script_data: The full script data (JSON structure)
-            source_articles: List of article IDs used as sources
-            generated_at: Timestamp when the script was generated
-            article_count: Number of articles used to generate the script
+        """Store a new comedy script"""
+        try:
+            if isinstance(generated_at, datetime):
+                generated_at = generated_at.isoformat()
+                
+            script_document = {
+                "title": title,
+                "script_data": script_data,
+                "source_articles": source_articles,
+                "generated_at": generated_at,
+                "article_count": article_count,
+                "created_at": datetime.now()
+            }
             
-        Returns:
-            ID of the stored script
-        """
-        # Ensure datetime is in ISO format string if it's a datetime object
-        if isinstance(generated_at, datetime):
-            generated_at = generated_at.isoformat()
+            result = self.collection.insert_one(script_document)
+            return str(result.inserted_id)
             
-        script_document = {
-            "title": title,
-            "script_data": script_data,
-            "source_articles": source_articles,
-            "generated_at": generated_at,
-            "article_count": article_count,
-            "created_at": datetime.now()
-        }
-        
-        result = self.collection.insert_one(script_document)
-        return str(result.inserted_id)
+        except PyMongoError as e:
+            print(f"Error storing script: {e}")
+            raise
     
     def get_script(self, script_id: str) -> Any:
-        """
-        Retrieve a comedy script by ID
-        
-        Args:
-            script_id: ID of the script to retrieve
-            
-        Returns:
-            Script document if found, None otherwise
-        """
+        """Retrieve a specific script by ID"""
         try:
             script = self.collection.find_one({"_id": ObjectId(script_id)})
             if script:
                 script["_id"] = str(script["_id"])
             return script
-        except Exception:
+            
+        except Exception as e:
+            print(f"Error retrieving script: {e}")
             return None
     
     def get_all_scripts(self, limit: int = 10) -> List[Dict]:
-        """
-        Retrieve the most recent comedy scripts
-        
-        Args:
-            limit: Maximum number of scripts to retrieve
+        """Get all scripts, sorted by creation date"""
+        try:
+            scripts = list(self.collection.find().sort("created_at", -1).limit(limit))
             
-        Returns:
-            List of script documents
-        """
-        scripts = list(self.collection.find().sort("created_at", -1).limit(limit))
-        
-        # Convert ObjectId to string
-        for script in scripts:
-            script["_id"] = str(script["_id"])
+            # Convert ObjectId to string
+            for script in scripts:
+                script["_id"] = str(script["_id"])
+                
+            return scripts
             
-        return scripts
+        except PyMongoError as e:
+            print(f"Error retrieving all scripts: {e}")
+            return []
     
     def get_scripts_by_source(self, article_id: str) -> List[Dict]:
-        """
-        Retrieve all scripts that used a specific article as source
-        
-        Args:
-            article_id: ID of the source article
+        """Get scripts that used a specific article as source"""
+        try:
+            scripts = list(self.collection.find({"source_articles": article_id}))
             
-        Returns:
-            List of script documents
-        """
-        scripts = list(self.collection.find({"source_articles": article_id}))
-        
-        # Convert ObjectId to string
-        for script in scripts:
-            script["_id"] = str(script["_id"])
+            # Convert ObjectId to string
+            for script in scripts:
+                script["_id"] = str(script["_id"])
+                
+            return scripts
             
-        return scripts
+        except PyMongoError as e:
+            print(f"Error retrieving scripts by source: {e}")
+            return []
+    
+    def close(self):
+        """Close MongoDB connection"""
+        if self.client:
+            self.client.close()

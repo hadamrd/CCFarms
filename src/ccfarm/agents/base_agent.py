@@ -89,8 +89,7 @@ class BaseAgent:
 
         json_str = match.group(1).strip()
         
-        # Simple pre-processing: Replace all SSML tag attribute quotes with single quotes
-        # This avoids the need to escape them in JSON
+        # Replace SSML tag attribute quotes with single quotes
         json_str = re.sub(r'(<[^>]+?)(\w+)="([^"]*)"([^>]*>)', r'\1\2=\'\3\'\4', json_str)
         
         try:
@@ -99,18 +98,18 @@ class BaseAgent:
                 raise ResponseParsingError(f"Parsed JSON is not a dictionary: {type(result)}")
             return result
         except json.JSONDecodeError as e:
-            # Enhanced error reporting
+            # Enhanced error reporting with more context
             pos = e.pos
-            context_start = max(0, pos - 30)
-            context_end = min(len(json_str), pos + 30)
+            context_start = max(0, pos - 50)  # Increased context window
+            context_end = min(len(json_str), pos + 50)
             context = json_str[context_start:context_end]
-            pointer = " " * (min(30, pos - context_start)) + "^ Error here"
+            pointer = " " * (min(50, pos - context_start)) + "^ Error here"
             
-            truncated_json = json_str[:300] + "..." if len(json_str) > 300 else json_str
+            truncated_json = json_str[:500] + "..." if len(json_str) > 500 else json_str
             error_msg = (
                 f"Invalid JSON in <{tag_name}> tags: {str(e)}\n"
                 f"Context around error: {context}\n{pointer}\n"
-                f"Content: {truncated_json}"
+                f"Full content (truncated): {truncated_json}"
             )
             self.logger.error(error_msg)
             raise ResponseParsingError(error_msg) from e
@@ -126,16 +125,15 @@ Return your response in <{tag}> format with valid JSON that conforms to this sch
 Make sure all required fields are included and properly formatted. 
 The response must be valid JSON enclosed in <{tag}> tags.
 IMPORTANT JSON FORMATTING REQUIREMENTS:
-
-All apostrophes (') in string values must be properly escaped as \'
-All quotes (") within string values must be properly escaped as \"
-Avoid unescaped control characters in strings
-Ensure all string values use double quotes for JSON compliance
-
-Example of proper escaping in JSON:
-"description": "This is a user's guide with "quoted text" inside"
-
-Improper escaping causes parsing failures. Please validate your JSON structure before returning.
+* All apostrophes (') in string values must be properly escaped as \'
+* All quotes (") within string values must be escaped as ", e.g., "He said \"hello\"" 
+* Avoid unescaped control characters in strings
+* Ensure all string values use double quotes for JSON compliance
+Example:
+{{
+  "text": "<prosody rate='90%'>Say \\"Hello, world!\\" with emphasis.</prosody>"
+}}
+Improper escaping causes parsing failures. Please validate your JSON structure before returning, ensuring all double quotes within text (including SSML content) are escaped with a backslash.
 """
 
     @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=60))

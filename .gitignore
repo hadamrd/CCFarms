@@ -2,4 +2,9 @@
 prefect-env/
 .venv
 .secrets
-**/*/.env
+*/**/.env
+**/*.mp4
+**/*.mp3
+.vscode
+.mypy_cache
+.cache

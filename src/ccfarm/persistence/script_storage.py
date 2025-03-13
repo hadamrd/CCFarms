@@ -43,21 +43,14 @@ class ScriptStorage:
         self,
         title: str,
         script_data: Dict,
-        source_articles: List[str],
-        generated_at: Union[datetime, str],
-        article_count: int
+        source_article: str
     ) -> str:
         """Store a new comedy script"""
         try:
-            if isinstance(generated_at, datetime):
-                generated_at = generated_at.isoformat()
-                
             script_document = {
                 "title": title,
                 "script_data": script_data,
-                "source_articles": source_articles,
-                "generated_at": generated_at,
-                "article_count": article_count,
+                "source_article":source_article,
                 "created_at": datetime.now()
             }
             
@@ -98,7 +91,7 @@ class ScriptStorage:
     def get_scripts_by_source(self, article_id: str) -> List[Dict]:
         """Get scripts that used a specific article as source"""
         try:
-            scripts = list(self.collection.find({"source_articles": article_id}))
+            scripts = list(self.collection.find({"source_article": article_id}))
             
             # Convert ObjectId to string
             for script in scripts:

@@ -1,4 +1,4 @@
-FROM prefecthq/prefect:2-latest
+FROM prefecthq/prefect:3-latest
 
 # Environment variables
 ENV POETRY_NO_INTERACTION=1 \

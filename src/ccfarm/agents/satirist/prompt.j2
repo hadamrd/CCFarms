@@ -1,24 +1,3 @@
-Review the following news articles carefully and create a comedy script that can be turned into voice segments for a video.
-
-Your script should:
-- Capture the most important and interesting information from the articles
-- Present the content in an entertaining and engaging way
-- Use a conversational tone that works well for spoken delivery
-- Include appropriate humor that enhances rather than distracts from the information
-- Structure the information logically with natural transitions between topics
-- Be concise while covering the essential points
-
-The script should feel like a professional but entertaining news commentary that viewers would enjoy listening to while watching related screenshots.
-
-Create a complete script with:
-1. A catchy title
-2. A brief description of the overall segment
-3. Speech segments that include the spoken text along with appropriate tone markers
-
-{% for brief in briefs %}
------ ARTICLE {{ loop.index }} -----
-{{ brief | tojson }}
-
-{% endfor %}
-
-Today's date is {{ date }}.
+Input Article:
+Title: {{ article.title }}
+Content: {{ article.content }}

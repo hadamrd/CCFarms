@@ -1,14 +1,10 @@
 from urllib.parse import urlparse
-from ccfarm.blocks import NewsAPIBlock
-
+from ccfarm.clients.news_client import NewsAPIClient
+from prefect.blocks.system import Secret
 
 if __name__ == "__main__":
     api_key = Secret.load("news-api-key")
-    client = NewsAPIClient(
-            api_key=self.api_key.get_secret_value(),
-            rate_limit=self.rate_limit,
-            skip_domains=self.skip_domains
-        )
+    client = NewsAPIClient(api_key)
 
     articles = client.get_everything(
         query="artificial intelligence",

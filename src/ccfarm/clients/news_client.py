@@ -107,9 +107,8 @@ class NewsAPIClient:
             if data.get('status') != 'ok':
                 error = data.get('message', 'Unknown error')
                 raise NewsAPIError(f"API returned error: {error}")
-                
             return data
-            
+        
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {str(e)}")
             raise NewsAPIError(f"Request failed: {str(e)}")

@@ -11,7 +11,6 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-prefect = "2.20.16"
 requests = ">=2.31.0"
 anthropic = ">=0.3.11"
 python-dotenv = ">=1.0.0"
@@ -20,8 +19,14 @@ trafilatura = "^2.0.0"
 bs4 = "^0.0.2"
 pymongo = "^4.11.1"
 autogen = "<0.7.0"
-pydantic = "1.10.13" 
 tabulate = "^0.9.0"
+soundfile = "^0.13.1"
+pydub = "^0.25.1"
+boto3 = "^1.37.9"
+prefect = "3.1.3"
+prefect-aws = "^0.5.5"
+elevenlabs = "^1.54.0"
+moviepy = "^2.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

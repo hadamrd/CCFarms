@@ -2,3 +2,4 @@
 prefect-env/
 .venv
 .secrets
+**/*/.env

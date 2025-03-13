@@ -88,20 +88,35 @@ class BaseAgent:
             raise ResponseParsingError(f"{error_msg}. Content: {truncated_content}")
 
         json_str = match.group(1).strip()
-
+        
+        # Simple pre-processing: Replace all SSML tag attribute quotes with single quotes
+        # This avoids the need to escape them in JSON
+        json_str = re.sub(r'(<[^>]+?)(\w+)="([^"]*)"([^>]*>)', r'\1\2=\'\3\'\4', json_str)
+        
         try:
             result = json.loads(json_str)
             if not isinstance(result, dict):
                 raise ResponseParsingError(f"Parsed JSON is not a dictionary: {type(result)}")
             return result
         except json.JSONDecodeError as e:
+            # Enhanced error reporting
+            pos = e.pos
+            context_start = max(0, pos - 30)
+            context_end = min(len(json_str), pos + 30)
+            context = json_str[context_start:context_end]
+            pointer = " " * (min(30, pos - context_start)) + "^ Error here"
+            
             truncated_json = json_str[:300] + "..." if len(json_str) > 300 else json_str
-            error_msg = f"Invalid JSON in <{tag_name}> tags: {str(e)}\nContent: {truncated_json}"
+            error_msg = (
+                f"Invalid JSON in <{tag_name}> tags: {str(e)}\n"
+                f"Context around error: {context}\n{pointer}\n"
+                f"Content: {truncated_json}"
+            )
             self.logger.error(error_msg)
             raise ResponseParsingError(error_msg) from e
 
     def _format_schema_instructions(self, model: Type[BaseModel], tag: str) -> str:
-        schema = model.schema()
+        schema = model.model_json_schema()
         return f"""
 Return your response in <{tag}> format with valid JSON that conforms to this schema:
 ```json
@@ -119,6 +134,7 @@ Ensure all string values use double quotes for JSON compliance
 
 Example of proper escaping in JSON:
 "description": "This is a user's guide with "quoted text" inside"
+
 Improper escaping causes parsing failures. Please validate your JSON structure before returning.
 """
 
@@ -136,7 +152,7 @@ Improper escaping causes parsing failures. Please validate your JSON structure b
         content = response.get("content")
         if content is None or not isinstance(content, str):
             raise LLMInteractionError("Response is missing content or content is not a string")
-
+        self.logger.info(f"LLM response: \n{content}...")
         return response
 
     def generate_reply(
@@ -170,10 +186,10 @@ Improper escaping causes parsing failures. Please validate your JSON structure b
 
         try:
             response = self._call_llm_with_retry(prompt)
-            self.logger.info("LLM call successful: {}".format(response))
             content = response["content"]
             json_data = self._extract_tagged_json(content, response_tag)
-            return response_model.parse_obj(json_data)
+            self.logger.info(f"Extracted JSON data: {json_data}")
+            return response_model.model_validate(json_data)
         except (ResponseParsingError, ValidationError, LLMInteractionError) as e:
             raise
         except Exception as e:

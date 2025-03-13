@@ -1,243 +1,226 @@
-import os
-import io
-import tempfile
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+import boto3
 from pathlib import Path
-from pydantic import BaseModel
-from prefect import get_run_logger
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+import tempfile
+from typing import Dict, List, Optional
+import re
 
-import requests
-from openai import OpenAI
-import soundfile as sf
-import numpy as np
-from pydub import AudioSegment
-
-from ccfarm.agents.base_agent import BaseAgent
-
-
-class VoiceGenerationError(Exception):
-    """Exception raised when voice generation fails."""
-    pass
-
-
-class VoiceGenerator(BaseAgent):
-    """
-    AI agent that generates voice audio from comedy script segments.
-    Uses OpenAI's TTS API for high-quality, cost-effective voice generation.
-    """
+class PollyVoiceGenerator:
+    """Voice generator using Amazon Polly with SSML support for comedy emphasis."""
     
-    # Voice options mapping (for OpenAI TTS)
-    VOICE_TONE_MAPPING = {
-        "neutral": "shimmer",  # Balanced, versatile voice
-        "excited": "alloy",    # Energetic, younger-sounding voice
-        "serious": "onyx",     # Deeper, authoritative voice
-        "funny": "nova",       # Friendly, expressive voice
-        "sarcastic": "echo",   # Slightly lower, good for sarcasm
+    # Mapping of tones to Polly voices
+    TONE_VOICE_MAPPING = {
+        "neutral": "Matthew",      # Balanced, professional
+        "upbeat": "Joanna",        # Energetic, cheerful
+        "excited": "Nicole",       # High energy, animated
+        "serious": "Brian",        # Deep, authoritative
+        "sarcastic": "Kendra",     # Good for deadpan delivery
+        "funny": "Joey",           # Expressive, versatile
+        "deadpan": "Kevin",        # Flat affect, good for dry humor
+        "amused": "Ruth",          # Warm, slightly playful
+        "warm": "Salli"            # Friendly, inviting
     }
     
-    # Default voice if tone isn't found in mapping
-    DEFAULT_VOICE = "shimmer"
+    NEURAL_VOICES = ["Matthew", "Joanna", "Kendra", "Kevin", "Joey"]
     
-    def __init__(
-        self,
-        openai_api_key: str,
-    ):
-        # Set up the directory for this agent
-        self.agent_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Configure LLM settings for AutoGen (used minimally for voice settings)
-        llm_config = {
-            "config_list": [
-                {
-                    "model": "gpt-4-turbo",
-                    "api_key": openai_api_key,
-                }
-            ],
-            "temperature": 0.2,  # Lower temperature for more predictable outputs
-        }
-        
-        super().__init__(
-            name="VoiceGenerator",
-            llm_config=llm_config,
-            template_dir=self.agent_dir,
-        )
-        
-        self.logger = get_run_logger()
-        self.openai_client = OpenAI(api_key=openai_api_key)
-        self.output_dir = Path(tempfile.gettempdir()) / "voice_segments"
-        self.output_dir.mkdir(exist_ok=True, parents=True)
-        
-    def generate_voice_for_script(self, script: Dict) -> str:
-        """
-        Generate voice audio for an entire comedy script.
-        
-        Args:
-            script: Dictionary with script data (same format as from Satirist agent)
-            
-        Returns:
-            Path to the final combined audio file
-        """
-        self.logger.info(f"Generating voice for script: {script.get('script_data', {}).get('title', 'Untitled')}")
-        
-        try:
-            script_data = script.get("script_data", {})
-            segments = script_data.get("segments", [])
-            
-            if not segments:
-                raise VoiceGenerationError("No segments found in script data")
-            
-            # Generate voice for each segment
-            segment_files = []
-            for i, segment in enumerate(segments):
-                self.logger.info(f"Processing segment {i+1}/{len(segments)}")
-                segment_path = self.generate_voice_for_segment(
-                    segment=segment,
-                    index=i,
-                    script_id=script.get("script_id", datetime.now().strftime("%Y%m%d%H%M%S"))
+    # Default voice if tone isn't found
+    DEFAULT_VOICE = "Matthew"
+    
+    def __init__(self, boto3_client=None, aws_access_key=None, aws_secret_key=None, region_name="us-east-1", output_dir=None):
+        """Initialize the Polly voice generator."""
+        if boto3_client is not None:
+            self.polly_client = boto3_client
+        else:
+            # Check if credentials are provided
+            if aws_access_key and aws_secret_key:
+                # Create client with provided credentials
+                self.polly_client = boto3.client(
+                    'polly',
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key,
+                    region_name=region_name
                 )
-                segment_files.append(segment_path)
+            else:
+                # Use environment or default AWS credentials
+                self.polly_client = boto3.client('polly', region_name=region_name)
+        
+        # Set up output directory
+        if output_dir:
+            self.output_dir = Path(output_dir)
+        else:
+            self.output_dir = Path(tempfile.gettempdir()) / "voice_segments"
+        
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+    
+    def process_script(self, script: dict, max_segments: Optional[int] = None) -> Optional[str]:
+        """Process a script JSON and generate audio for segments."""
+        try:
             
-            # Combine all segments into a single file
-            final_path = self.combine_audio_segments(
-                segment_files=segment_files,
-                script_id=script.get("script_id", datetime.now().strftime("%Y%m%d%H%M%S"))
-            )
+            # Extract segments
+            segments = script.get("segments", [])
             
-            self.logger.info(f"Successfully generated voice for script: {final_path}")
-            return final_path
+            # Limit segments if specified
+            if max_segments is not None:
+                segments = segments[:max_segments]
+            
+            # Generate audio for each segment
+            audio_files = []
+            for i, segment in enumerate(segments):
+                print(f"Processing segment {i+1}/{len(segments)}")
+                audio_path = self.generate_segment_audio(segment, i)
+                if audio_path:
+                    audio_files.append(audio_path)
+            
+            # Combine segments
+            if audio_files:
+                return self.combine_audio_segments(audio_files)
+            
+            return None
             
         except Exception as e:
-            self.logger.error(f"Error generating voice for script: {str(e)}")
-            raise VoiceGenerationError(f"Failed to generate voice: {str(e)}") from e
+            print(f"Error processing script: {str(e)}")
+            return None
     
-    @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=20))
-    def generate_voice_for_segment(self, segment: Dict, index: int, script_id: str) -> str:
-        """
-        Generate voice audio for a single segment using OpenAI's TTS API.
-        
-        Args:
-            segment: Dictionary with segment data (text, tone, speed, pause_after)
-            index: Segment index for file naming
-            script_id: Script identifier for file naming
-            
-        Returns:
-            Path to the generated audio file
-        """
-        self.logger.info(f"Generating voice for segment {index+1}")
-        
-        # Extract segment parameters
-        text = segment.get("text", "")
-        tone = segment.get("tone", "neutral")
-        speed = segment.get("speed", 1.0)
-        pause_after = segment.get("pause_after", 0.0)
-        
-        if not text:
-            self.logger.warning(f"Empty text for segment {index+1}")
-            return self._create_silence_file(1.0, index, script_id)  # Return 1 second of silence
-        
+    def generate_segment_audio(self, segment: Dict, index: int) -> Optional[str]:
+        """Generate audio for a single segment using Polly with SSML."""
         try:
-            # Determine the voice based on tone
-            voice = self.VOICE_TONE_MAPPING.get(tone.lower(), self.DEFAULT_VOICE)
+            # Extract parameters
+            text = segment.get("text", "")
+            tone = segment.get("voice_tone", segment.get("tone", "neutral"))
+            pause_after = segment.get("pause_after", 0.0)
             
-            # Generate speech with OpenAI TTS
-            response = self.openai_client.audio.speech.create(
-                model="tts-1",  # Use tts-1 for cost-effectiveness, or tts-1-hd for higher quality
-                voice=voice,
-                input=text,
-                speed=speed
+            if not text:
+                return self._create_silence_file(1.0, index)
+            
+            # Select voice based on tone
+            voice_id = self.TONE_VOICE_MAPPING.get(tone.lower(), self.DEFAULT_VOICE)
+            
+            # Properly sanitize and prepare SSML text
+            text = self._prepare_ssml(text, voice_id)
+            
+            # Log the query for debugging
+            print(f"Generating segment {index} with voice: {voice_id}")
+            print(f"Text: {text}")
+            
+            response = self.polly_client.synthesize_speech(
+                Engine='neural',
+                OutputFormat='mp3',
+                Text=text,
+                TextType='ssml',
+                VoiceId=voice_id
             )
             
-            # Save to temporary file
-            segment_filename = f"{script_id}_segment_{index:03d}.mp3"
-            segment_path = self.output_dir / segment_filename
+            # Save audio to file
+            if "AudioStream" in response:
+                output_file = str(self.output_dir / f"segment_{index:03d}.mp3")
+                with open(output_file, "wb") as file:
+                    file.write(response["AudioStream"].read())
+                
+                # Add pause if needed
+                if pause_after > 0:
+                    return self._add_pause_after(output_file, pause_after, index)
+                
+                return output_file
             
-            # Save the audio content
-            with open(segment_path, "wb") as f:
-                response.stream_to_file(segment_path)
-            
-            # Add pause if specified
-            if pause_after > 0:
-                segment_path = self._add_pause_after(segment_path, pause_after, index, script_id)
-            
-            self.logger.info(f"Voice generated for segment {index+1}: {segment_path}")
-            return str(segment_path)
+            return None
             
         except Exception as e:
-            self.logger.error(f"Error generating voice for segment {index+1}: {str(e)}")
-            raise VoiceGenerationError(f"Failed to generate voice for segment {index+1}: {str(e)}") from e
+            print(f"Error generating segment {index}: {str(e)}")
+            return None
     
-    def _create_silence_file(self, duration: float, index: int, script_id: str) -> str:
-        """Create a silence audio file of specified duration."""
-        # Create a silent audio segment
-        silence = AudioSegment.silent(duration=int(duration * 1000))  # Duration in milliseconds
+    def _prepare_ssml(self, text: str, voice_id: str) -> str:
+        """Prepare and fix SSML text for Amazon Polly."""
+        # Remove any existing speak tags
+        text = re.sub(r'</?speak>', '', text)
         
-        # Save to file
-        silence_filename = f"{script_id}_silence_{index:03d}.mp3"
-        silence_path = self.output_dir / silence_filename
-        silence.export(silence_path, format="mp3")
+        # Fix common SSML issues
+        # 1. Close unclosed prosody tags
+        open_prosody = text.count('<prosody')
+        close_prosody = text.count('</prosody')
+        if open_prosody > close_prosody:
+            for _ in range(open_prosody - close_prosody):
+                text = text + '</prosody>'
         
-        return str(silence_path)
+        # 2. Close unclosed emphasis tags
+        open_emphasis = text.count('<emphasis')
+        close_emphasis = text.count('</emphasis')
+        if open_emphasis > close_emphasis:
+            for _ in range(open_emphasis - close_emphasis):
+                text = text + '</emphasis>'
+                
+        # Apply neural voice limitations if needed
+        if voice_id in self.NEURAL_VOICES:
+            # 3. Keep pitch modifications within neural voice limits (+/- 20%)
+            text = re.sub(r'pitch=[\'"]([+-])(\d{2,})[\'"%]', lambda m: f'pitch="{m.group(1)}20%"' if int(m.group(2)) > 20 else m.group(0), text)
+            
+            # 4. Remove unsupported SSML tags for neural voices
+            text = re.sub(r'<say-as[^>]*>.*?</say-as>', '', text)
+            
+        # Wrap the final text in speak tags
+        return f"<speak>{text}</speak>"
     
-    def _add_pause_after(self, audio_path: Path, pause_duration: float, 
-                         index: int, script_id: str) -> str:
-        """Add a pause (silence) after the audio segment."""
+    def _sanitize_ssml_for_neural(self, ssml: str) -> str:
+        """Clean SSML for Neural voice compatibility"""
+        # This method is replaced by the more comprehensive _prepare_ssml
+        return ssml
+    
+    def _create_silence_file(self, duration: float, index: int) -> str:
+        """Create a silent audio file of specified duration."""
+        from pydub import AudioSegment
+        
+        silence = AudioSegment.silent(duration=int(duration * 1000))
+        
+        silence_file = str(self.output_dir / f"silence_{index:03d}.mp3")
+        silence.export(silence_file, format="mp3")
+        
+        return silence_file
+    
+    def _add_pause_after(self, audio_path: str, pause_duration: float, index: int) -> str:
+        """Add a pause after the audio segment."""
+        from pydub import AudioSegment
+        
         try:
-            # Load the audio file
+            # Load audio
             audio = AudioSegment.from_file(audio_path)
             
-            # Create silence of specified duration
-            silence = AudioSegment.silent(duration=int(pause_duration * 1000))  # Convert to milliseconds
+            # Create silence
+            silence = AudioSegment.silent(duration=int(pause_duration * 1000))
             
-            # Combine audio with silence
+            # Combine
             combined = audio + silence
             
-            # Save to a new file
-            combined_filename = f"{script_id}_segment_with_pause_{index:03d}.mp3"
-            combined_path = self.output_dir / combined_filename
-            combined.export(combined_path, format="mp3")
+            # Save
+            output_file = str(self.output_dir / f"segment_with_pause_{index:03d}.mp3")
+            combined.export(output_file, format="mp3")
             
-            return str(combined_path)
+            return output_file
             
         except Exception as e:
-            self.logger.error(f"Error adding pause to segment {index}: {str(e)}")
-            # Return original path if pause addition fails
-            return str(audio_path)
+            print(f"Error adding pause: {str(e)}")
+            return audio_path
     
-    def combine_audio_segments(self, segment_files: List[str], script_id: str) -> str:
+    def combine_audio_segments(self, segment_files: List[str]) -> str:
         """Combine multiple audio segments into a single file."""
-        self.logger.info(f"Combining {len(segment_files)} audio segments")
+        from pydub import AudioSegment
         
         try:
             if not segment_files:
-                raise VoiceGenerationError("No segment files to combine")
+                return None
             
-            # Initialize with the first segment
+            # Start with first segment
             combined = AudioSegment.from_file(segment_files[0])
             
-            # Add the rest of the segments
-            for segment_path in segment_files[1:]:
-                segment = AudioSegment.from_file(segment_path)
+            # Add the rest
+            for file_path in segment_files[1:]:
+                segment = AudioSegment.from_file(file_path)
                 combined += segment
             
             # Save the combined audio
-            output_filename = f"{script_id}_combined.mp3"
-            output_path = self.output_dir / output_filename
-            combined.export(output_path, format="mp3")
+            timestamp = tempfile._get_candidate_names().__next__()
+            output_file = str(self.output_dir / f"combined_output_{timestamp}.mp3")
+            combined.export(output_file, format="mp3")
             
-            self.logger.info(f"Successfully combined audio segments: {output_path}")
-            return str(output_path)
+            return output_file
             
         except Exception as e:
-            self.logger.error(f"Error combining audio segments: {str(e)}")
-            raise VoiceGenerationError(f"Failed to combine audio segments: {str(e)}") from e
-        
-    def clean_up_segment_files(self, segment_files: List[str]) -> None:
-        """Remove temporary segment files to free up space."""
-        for file_path in segment_files:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as e:
-                self.logger.warning(f"Failed to remove temporary file {file_path}: {str(e)}")
+            print(f"Error combining segments: {str(e)}")
+            return None

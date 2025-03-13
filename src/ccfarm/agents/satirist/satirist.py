@@ -1,20 +1,22 @@
 import os
-from typing import Dict, List, cast
-from datetime import datetime
-from prefect import get_run_logger
+from typing import Any, Dict, List, cast
+from ccfarm.agents.satirist.models import ComedyScript
+from common.utils import get_flow_aware_logger
 from ccfarm.agents.base_agent import BaseAgent
-from .models import ComedyScript
+from ccfarm.clients.news_client import NewsAPIClient
 
 
 class Satirist(BaseAgent):
     """
-    AI agent that generates comedy scripts from analyzed news briefs.
+    AI agent that performs detailed analysis on news articles for comedy potential.
     Uses the BaseAgent class for structured prompting and response validation.
     """
+    news_client: NewsAPIClient
     
     def __init__(
         self,
         anthropic_api_key: str,
+        news_client: NewsAPIClient,
     ):
         # Set up the directory for this agent
         self.agent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,44 +31,67 @@ class Satirist(BaseAgent):
                     "api_type": "anthropic",
                 }
             ],
-            "temperature": 0.7,  # Higher temperature for more creative comedy
+            "temperature": 0.7, # Higher temperature for more creative responses
         }
         
         super().__init__(
-            name="NewsComedian",
+            name="NewsDebriefer",
             llm_config=llm_config,
-            template_dir=self.agent_dir,
+            template_dir=self.agent_dir
         )
         
-        self.logger = get_run_logger()
-    
-    def generate_comedy_script(self, analyzed_articles: List[Dict]) -> Dict:
-        try:
-            self.logger.info(f"Generating comedy script for {len(analyzed_articles)} articles")
+        self.logger = get_flow_aware_logger("Satirist")
+        self.news_client = news_client
+
+    def process_articles(self, raw_articles: List[Dict]) -> List[ComedyScript]:
+        if not self.news_client:
+            raise ValueError("NewsAPI client not initialized")
             
-            # Generate the script using the prompt template
+        processed = []
+        
+        for article in raw_articles:
+            try:
+                # First get the full content
+                url = article.get('url')
+                if not url:
+                    self.logger.warning(f"Skipping article with no URL: {article.get('title')}")
+                    continue
+
+                content = self.news_client.fetch_article_content(url)
+                if not content:
+                    self.logger.warning(f"Could not fetch content for: {url}")
+                    continue
+
+                # Add full content to article
+                article['content'] = content
+
+                # Now analyze with full content
+                try:
+                    result = self.produce_article_audio_script(article)
+                    processed.append(result)
+                    self.logger.info(f"Successfully analyzed article: {article.get('title')}")
+                except Exception as e:
+                    self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
+                
+            except Exception as e:
+                self.logger.error(f"Processing failed for {article.get('title', 'Unknown')}: {str(e)}")
+                
+        return processed
+    
+    def produce_article_audio_script(self, article: Dict) -> ComedyScript:
+        try:
+            self.logger.info(f"Analyzing article: {article.get('title')}")
+            
             script = cast(ComedyScript, self.generate_reply(
                 prompt_template="prompt.j2",
                 response_tag="response",
                 response_model=ComedyScript,
-                briefs=analyzed_articles,
-                date=datetime.now().strftime("%A, %B %d, %Y")
+                article=article
             ))
-
-            script_dict = script.dict()
             
-            result = {
-                "script_data": script_dict,
-                "source_articles": [
-                    article.get("title", "unknown") 
-                    for article in analyzed_articles
-                ],
-                "generated_at": datetime.now().isoformat(),
-                "article_count": len(analyzed_articles)
-            }
-            
-            return result
+            return script
             
         except Exception as e:
-            self.logger.error(f"Error generating comedy script: {str(e)}")
-            raise  # Re-raise for retry logic to be handled by caller
+            self.logger.error(f"Error analyzing article: {article.get('title', 'Unknown')}: {e}")
+            raise
+

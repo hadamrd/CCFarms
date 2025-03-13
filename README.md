@@ -217,6 +217,13 @@ docker compose logs -f prefect-worker
 prefect deployment logs satire-script-generation/latest
 ```
 
+### Install notes
+for the audio modules to work properly you need to install ffmpeg modules
+```
+sudo apt-get update
+sudo apt-get install ffmpeg
+```
+
 ## Contributing
 
 1. Fork the repository

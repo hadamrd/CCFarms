@@ -1,0 +1,47 @@
+{
+  "title": "Netflix's AI Upgrade Turns 80s Sitcom into Digital Horror Show",
+  "description": "A satirical look at Netflix's disastrous attempt to use AI...",
+  "source": "",
+  "segments": [
+    {
+      "text": "<prosody rate=\"90%\" pitch=\"-10%\">In Netflix's latest attempt to prove that AI can do everything better than humans, they've successfully transformed 'A Different World' into what can only be described as 'A HORRIFYING World.'</prosody> <break time=\"0.5s\"/> <emphasis level=\"strong\">Congratulations on inventing digital body horror!</emphasis>",
+      "character": "Podcaster",
+      "tone": "neutral",
+      "filename": "01_Podcaster.mp3",
+      "duration": 13.819,
+      "keywords": [
+        "facepalm",
+        "horrified",
+        "sarcastic",
+        "tech-fail"
+      ]
+    },
+    {
+      "text": "<prosody rate=\"110%\">The AI apparently went to the Salvador Dali school of image processing, giving characters extra fingers, melted faces, and text that looks like it was written by a cat walking across a keyboard.</prosody> <break time=\"0.5s\"/> <emphasis level=\"strong\">It's not a bug, it's a FEATURE!</emphasis>",
+      "character": "Podcaster",
+      "tone": "neutral",
+      "filename": "02_Podcaster.mp3",
+      "duration": 14.028,
+      "keywords": [
+        "glitch",
+        "confused",
+        "eye-roll",
+        "bizarre"
+      ]
+    },
+    {
+      "text": "<prosody pitch=\"+15%\">Netflix's cost-cutting solution has given us something truly special - the world's first sitcom that doubles as a psychological horror experiment!</prosody> <break time=\"1s\"/> <emphasis level=\"strong\">Who needs actual remastering when you can traumatize your audience for free?</emphasis>",
+      "character": "Podcaster",
+      "tone": "neutral",
+      "filename": "03_Podcaster.mp3",
+      "duration": 13.035,
+      "keywords": [
+        "laughing",
+        "scared",
+        "mocking",
+        "cringe"
+      ]
+    }
+  ],
+  "combined_file": "Netflix's_AI_Upgrade_Turns_80s_Sitcom_into_Digital_Horror_Show_combined.mp3"
+}

@@ -27,6 +27,9 @@ prefect = "3.1.3"
 prefect-aws = "^0.5.5"
 elevenlabs = "^1.54.0"
 moviepy = "^2.1.2"
+google-api-python-client = "^2.164.0"
+google-auth-oauthlib = "^1.2.1"
+google-auth-httplib2 = "^0.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

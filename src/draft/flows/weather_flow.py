@@ -1,13 +1,11 @@
 # src/orchestration_play/flows/weather_flow.py
+from common.blocks.notifications.teams_webhook import TeamsWebhook
 from prefect import flow, task, get_run_logger
 from datetime import datetime
 import requests
 from anthropic import Anthropic
 from prefect.blocks.system import Secret
 from prefect.artifacts import create_markdown_artifact
-
-from ccfarm.blocks import TeamsWebhook
-
 
 @task(name="Fetch Weather Data", retries=3)
 def fetch_weather_data(location="London"):

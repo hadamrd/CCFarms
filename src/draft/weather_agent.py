@@ -1,11 +1,10 @@
 # src/orchestration_play/agents/weather/weather_agent.py
 import os
 import json
+from ccfarm.agents.base_agent import BaseAgent
 import requests
 from typing import Dict, Optional
 from prefect import get_run_logger
-
-from ..ccfarm.agents.base_agent import BaseAgent
 
 class WeatherReporter(BaseAgent):
     """

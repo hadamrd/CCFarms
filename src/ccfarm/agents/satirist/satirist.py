@@ -1,10 +1,10 @@
 import os
-from typing import Any, Dict, List, cast
-from ccfarm.agents.satirist.models import ComedyScript
+from typing import cast
+from ccfarm.agents.satirist.models import VideoScript
 from common.utils import get_flow_aware_logger
 from ccfarm.agents.base_agent import BaseAgent
 from ccfarm.clients.news_client import NewsAPIClient
-
+from datetime import datetime
 
 class Satirist(BaseAgent):
     """
@@ -25,13 +25,13 @@ class Satirist(BaseAgent):
         llm_config = {
             "config_list": [
                 {
-                    "model": "claude-3-5-sonnet-20241022",
+                    "model": "claude-3-7-sonnet-20250219",
                     "api_key": anthropic_api_key,
                     "api_base": "https://api.anthropic.com/v1/messages",
                     "api_type": "anthropic",
                 }
             ],
-            "temperature": 0.7, # Higher temperature for more creative responses
+            "temperature": 0.7,
         }
         
         super().__init__(
@@ -43,11 +43,9 @@ class Satirist(BaseAgent):
         self.logger = get_flow_aware_logger("Satirist")
         self.news_client = news_client
 
-    def process_articles(self, raw_articles: List[Dict]) -> List[ComedyScript]:
+    def process_articles(self, raw_articles: list[dict]) -> VideoScript|None:
         if not self.news_client:
             raise ValueError("NewsAPI client not initialized")
-            
-        processed = []
         
         for article in raw_articles:
             try:
@@ -64,34 +62,31 @@ class Satirist(BaseAgent):
 
                 # Add full content to article
                 article['content'] = content
-
-                # Now analyze with full content
-                try:
-                    result = self.produce_article_audio_script(article)
-                    processed.append(result)
-                    self.logger.info(f"Successfully analyzed article: {article.get('title')}")
-                except Exception as e:
-                    self.logger.error(f"Analysis failed for {article.get('title')}: {str(e)}")
                 
             except Exception as e:
                 self.logger.error(f"Processing failed for {article.get('title', 'Unknown')}: {str(e)}")
-                
-        return processed
-    
-    def produce_article_audio_script(self, article: Dict) -> ComedyScript:
+        
         try:
-            self.logger.info(f"Analyzing article: {article.get('title')}")
+            return self.produce_article_audio_script(raw_articles)
+        except Exception as e:
+            self.logger.error(f"Satirist youtube script generation failed!")
+            return None
+
+    def produce_article_audio_script(self, articles: list[dict]) -> VideoScript:
+        try:
+            self.logger.info(f"Generating multi-article script for {len(articles)} articles")
             
-            script = cast(ComedyScript, self.generate_reply(
-                prompt_template="prompt.j2",
+            script = cast(VideoScript, self.generate_reply(
+                prompt_template="multi_article_prompt.j2",
                 response_tag="response",
-                response_model=ComedyScript,
-                article=article
+                response_model=VideoScript,
+                articles=articles,
+                date=datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
             ))
             
+            self.logger.info(f"Successfully generated script: {script.title}")
             return script
-            
+        
         except Exception as e:
-            self.logger.error(f"Error analyzing article: {article.get('title', 'Unknown')}: {e}")
+            self.logger.error(f"Error generating multi-article script: {e}")
             raise
-

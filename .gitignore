@@ -8,3 +8,4 @@ prefect-env/
 .vscode
 .mypy_cache
 .cache
+youtube_credentials_backup.json

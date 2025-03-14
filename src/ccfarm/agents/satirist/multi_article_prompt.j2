@@ -1,0 +1,34 @@
+Transform the given news articles into a satirical comedy script for your YouTube channel. Generate a catchy title and structure the script into segments as follows:
+
+# Input Articles:
+{% for article in articles %}
+{{ loop.index }}. Title: {{ article.title }}
+   Content: {{ article.content }}
+{% endfor %}
+
+# Script Requirements:
+- **Title:** Create a catchy, satirical title reflecting the combined news stories.
+- **Segments:**
+  - **Intro Segment:** Use the exact text: "Hello guys, this is TechSass, and in today’s video, we’re diving into the wild world of tech with a twist of sass. <this message should be adapted to the articles vibes>"
+  - **Main Segments (3-5):** Generate 3-5 segments blending info from the articles. Each segment should have:
+    - **Text:** 2-3 sentences in your nerdy, sarcastic style with humor, exaggeration and absurdity. Add SSML tags (<emphasis>, <prosody>, <break>) for comedic timing and delivery.
+    - **Keywords:** specific and visually representable keywords (e.g., "drone", "explosion", "confused" ... ) for fetching GIFs/images.
+  - **Outro Segment:** Use the exact text: "And that’s a wrap, folks! If you enjoyed this dose of tech sass, hit that subscribe button to stay tuned. <here insert something funny>"
+
+# Output Format:
+Return a JSON object matching the ComedyScript model:
+{
+  "title": "your catchy title",
+  "segments": [
+    {"text": "intro text with SSML", "keywords": ["keyword1", "keyword2", ...]},
+    {"text": "main segment 1 text with SSML", "keywords": ["keyword1", "keyword2", ...]},
+    ...
+    {"text": "outro text with SSML", "keywords": ["keyword1", "keyword2", ...]}
+  ]
+}
+
+# Notes:
+- Keep it hilarious, tech-focused, and true to the articles.
+- Use keywords that fetch great visuals (specific nouns/actions/emotions, not vague terms).
+- Weave a loose theme or gag across segments for cohesion.
+- Make it sound natural, like you’re riffing live!.

@@ -43,24 +43,23 @@ class ScriptStorage:
         self,
         title: str,
         script_data: Dict,
-        source_article: str
+        source_articles: List[str]
     ) -> str:
-        """Store a new comedy script"""
+        """Store a new comedy script with multiple source articles"""
         try:
             script_document = {
                 "title": title,
                 "script_data": script_data,
-                "source_article":source_article,
+                "source_articles": source_articles,
                 "created_at": datetime.now()
             }
             
             result = self.collection.insert_one(script_document)
             return str(result.inserted_id)
-            
         except PyMongoError as e:
             print(f"Error storing script: {e}")
             raise
-    
+        
     def get_script(self, script_id: str) -> Any:
         """Retrieve a specific script by ID"""
         try:

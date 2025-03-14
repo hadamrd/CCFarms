@@ -1,7 +1,7 @@
 from .satirist.satirist import Satirist
-from .digger.digger import Digger
+from .scout.scorer import ArticleScorer
 
 __all__ = [
-    'Digger',
+    'ArticleScorer',
     'Satirist'
 ]

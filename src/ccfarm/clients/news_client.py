@@ -48,7 +48,7 @@ class NewsAPIClient:
         *,
         page_size: int = 20,
         language: str = "en",
-        sort_by: str = "popularity",
+        sort_by: str = "relevancy",
         exclude_domains: Optional[List[str]] = None,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None

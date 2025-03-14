@@ -58,7 +58,7 @@ class SpeechSegment(BaseModel):
             print(f"Error exporting segment to video: {str(e)}")
             return None
 
-class ComedyScript(BaseModel):
+class VideoScript(BaseModel):
     title: str = Field(
         description="A catchy, satirical title for the comedy piece - should be humorous "
         "and capture the essence of the original news with an ironic twist."

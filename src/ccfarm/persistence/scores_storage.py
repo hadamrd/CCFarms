@@ -1,5 +1,5 @@
 # src/orchestration_play/persistence/article_cache.py
-from ccfarm.agents.digger.models import ArticleScore
+from ccfarm.agents.scout.models import ArticleScore
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime, timedelta

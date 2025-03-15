@@ -107,7 +107,7 @@ def satirist_flow(
         video_path=output_path,
         title=script.title,
         description=script.description,
-        tags=script.topic_tags
+        tags=script.tags
     )
     
     logger.info(f"Video uploaded successfully. Link: {video_link}")

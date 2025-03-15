@@ -7,6 +7,7 @@ import inspect
 from typing import Dict, Optional, Any, Type
 
 from autogen import AssistantAgent
+from common.utils import get_flow_aware_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 from prefect import get_run_logger
@@ -34,7 +35,7 @@ class BaseAgent:
         system_message_kwargs: Optional[Dict[str, Any]] = None,
         max_retries: int = 3,
     ):
-        self.logger = get_run_logger()
+        self.logger = get_flow_aware_logger()
         self.name = name
         self.max_retries = max_retries
 
